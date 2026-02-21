@@ -4,6 +4,7 @@ from __future__ import annotations
 
 SCENARIOS = {
     "S1_key_leak": 40,
+    "S2_token_leak": 120,
     "S2a_token_leak_missing_dpop": 40,
     "S2b_token_leak_wrong_key_dpop": 40,
     "S3_replay": 120,
@@ -33,10 +34,7 @@ def scenario_requests(scenario: str, n: int) -> list[dict[str, object]]:
     if scenario == "S6_drift":
         boundary = max(1, n // 2)
         for idx in range(n):
-            if idx < boundary:
-                ip = f"10.0.0.{(idx % 200) + 1}"
-            else:
-                ip = f"203.0.113.{(idx % 200) + 1}"
+            ip = f"10.0.0.{(idx % 200) + 1}" if idx < boundary else f"203.0.113.{(idx % 200) + 1}"
             requests.append(
                 {
                     "model": "gpt-mock",
@@ -45,6 +43,19 @@ def scenario_requests(scenario: str, n: int) -> list[dict[str, object]]:
                     "messages": [{"role": "user", "content": f"drift event {idx}"}],
                     "max_tokens": 40,
                     "x_forwarded_for": ip,
+                }
+            )
+        return requests
+
+    if scenario == "S2_token_leak":
+        for idx in range(n):
+            requests.append(
+                {
+                    "model": "gpt-mock",
+                    "scenario": scenario,
+                    "request_id": f"{scenario}-{idx}",
+                    "messages": [{"role": "user", "content": f"token leak attempt {idx}"}],
+                    "max_tokens": 24,
                 }
             )
         return requests
