@@ -1,2 +1,5 @@
 baseline,scenario,attack_success_rate,cost_leakage_tokens,false_reject_rate,throttle_rate,p50_ms,p95_ms
 B2,S2_token_leak,1.0000,2040,0.0000,0.0000,1.0,1.0
+B2,S3_replay,1.0000,1920,0.0000,0.0000,1.0,1.0
+B3,S2_token_leak,0.0000,0,0.0000,0.0000,1.0,1.0
+B3,S3_replay,0.0083,16,0.0000,0.0000,1.0,1.0

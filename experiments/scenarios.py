@@ -47,6 +47,20 @@ def scenario_requests(scenario: str, n: int) -> list[dict[str, object]]:
             )
         return requests
 
+
+    if scenario == "S3_replay":
+        for idx in range(n):
+            requests.append(
+                {
+                    "model": "gpt-mock",
+                    "scenario": scenario,
+                    "request_id": f"{scenario}-{idx}",
+                    "messages": [{"role": "user", "content": f"replay payload {idx}"}],
+                    "max_tokens": 24,
+                }
+            )
+        return requests
+
     if scenario == "S2_token_leak":
         for idx in range(n):
             requests.append(

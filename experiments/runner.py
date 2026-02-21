@@ -7,6 +7,7 @@ from pathlib import Path
 from baselines.B0_static.harness import run_b0_scenario
 from baselines.B1_ip_allowlist.harness import run_b1_scenario
 from baselines.B2_bearer_short.harness import run_b2_scenario
+from baselines.B3_pop_only.harness import run_b3_scenario
 from experiments.scenarios import SCENARIOS
 from experiments.types import EventRow
 
@@ -30,7 +31,9 @@ def run_selected(*, baselines: list[str], scenarios: list[str], out_dir: Path) -
                 continue
             if baseline == "B1" and scenario != "S6_drift":
                 continue
-            if baseline == "B2" and scenario != "S2_token_leak":
+            if baseline == "B2" and scenario not in {"S2_token_leak", "S3_replay"}:
+                continue
+            if baseline == "B3" and scenario not in {"S2_token_leak", "S3_replay"}:
                 continue
 
             log_path = raw_dir / f"{baseline}_{scenario}.jsonl"
@@ -43,4 +46,6 @@ def run_selected(*, baselines: list[str], scenarios: list[str], out_dir: Path) -
                 events.extend(run_b1_scenario(scenario=scenario, n=n, log_path=log_path))
             elif baseline == "B2":
                 events.extend(run_b2_scenario(scenario=scenario, n=n, log_path=log_path))
+            elif baseline == "B3":
+                events.extend(run_b3_scenario(scenario=scenario, n=n, log_path=log_path))
     return events
