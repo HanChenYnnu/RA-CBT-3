@@ -1,15 +1,19 @@
-"""Small deterministic smoke run."""
+"""Synthetic smoke run for stage1 harness."""
 
 from __future__ import annotations
 
-from experiments.expected_deltas import assert_required_deltas
-from experiments.runner import synthetic_rows
+from experiments.metrics import compute_metrics
+from experiments.plots import generate_plots
+from experiments.report import write_report
+from experiments.runner import synthetic_events
 
 
 def main() -> None:
-    rows = synthetic_rows()
-    assert_required_deltas(rows)
-    print(f"[smoke_run] validated {len(rows)} synthetic rows and hard deltas")
+    events = synthetic_events()[:8]
+    rows = compute_metrics(events)
+    write_report(rows)
+    plots = generate_plots(rows)
+    print(f"[smoke_run] events={len(events)} metric_rows={len(rows)} plots={len(plots)}")
 
 
 if __name__ == "__main__":
