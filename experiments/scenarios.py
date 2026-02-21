@@ -14,18 +14,39 @@ SCENARIOS = {
 
 
 def scenario_requests(scenario: str, n: int) -> list[dict[str, object]]:
-    if scenario != "S4_burst":
-        return []
     requests: list[dict[str, object]] = []
-    for idx in range(n):
-        text = "burst load " + ("x" * ((idx % 20) + 20))
-        requests.append(
-            {
-                "model": "gpt-mock",
-                "scenario": scenario,
-                "request_id": f"{scenario}-{idx}",
-                "messages": [{"role": "user", "content": text}],
-                "max_tokens": 32 + (idx % 64),
-            }
-        )
+    if scenario == "S4_burst":
+        for idx in range(n):
+            text = "burst load " + ("x" * ((idx % 20) + 20))
+            requests.append(
+                {
+                    "model": "gpt-mock",
+                    "scenario": scenario,
+                    "request_id": f"{scenario}-{idx}",
+                    "messages": [{"role": "user", "content": text}],
+                    "max_tokens": 32 + (idx % 64),
+                    "x_forwarded_for": "10.0.0.10",
+                }
+            )
+        return requests
+
+    if scenario == "S6_drift":
+        boundary = max(1, n // 2)
+        for idx in range(n):
+            if idx < boundary:
+                ip = f"10.0.0.{(idx % 200) + 1}"
+            else:
+                ip = f"203.0.113.{(idx % 200) + 1}"
+            requests.append(
+                {
+                    "model": "gpt-mock",
+                    "scenario": scenario,
+                    "request_id": f"{scenario}-{idx}",
+                    "messages": [{"role": "user", "content": f"drift event {idx}"}],
+                    "max_tokens": 40,
+                    "x_forwarded_for": ip,
+                }
+            )
+        return requests
+
     return requests

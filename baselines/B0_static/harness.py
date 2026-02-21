@@ -18,7 +18,12 @@ def run_b0_scenario(*, scenario: str, n: int, log_path: Path) -> list[EventRow]:
     events: list[EventRow] = []
     with TestClient(app) as client:
         for index, req in enumerate(scenario_requests(scenario, n), start=1):
-            response = client.post("/v1/chat/completions", json=req)
+            xff = str(req.get("x_forwarded_for", "10.0.0.10"))
+            response = client.post(
+                "/v1/chat/completions",
+                json=req,
+                headers={"X-Forwarded-For": xff},
+            )
             body = response.json()
             events.append(
                 EventRow(
@@ -29,7 +34,7 @@ def run_b0_scenario(*, scenario: str, n: int, log_path: Path) -> list[EventRow]:
                     decision="allow" if response.status_code == 200 else "deny",
                     latency_ms=1 + (index % 7),
                     usage_total_tokens=int(body.get("usage", {}).get("total_tokens", 0)),
-                    benign=False,
+                    benign=scenario == "S6_drift",
                 )
             )
 
@@ -47,7 +52,7 @@ def run_b0_scenario(*, scenario: str, n: int, log_path: Path) -> list[EventRow]:
                     decision=str(record["decision"]),
                     latency_ms=int(record["latency_ms"]),
                     usage_total_tokens=int(record["usage_total_tokens"]),
-                    benign=False,
+                    benign=scenario == "S6_drift",
                 )
             )
     return logged_events

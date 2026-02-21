@@ -19,6 +19,7 @@ class _Response:
 
 class TestClient:
     __test__ = False
+
     def __init__(self, app: FastAPI) -> None:
         self.app = app
 
@@ -28,7 +29,17 @@ class TestClient:
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         return None
 
-    def post(self, path: str, json: dict[str, Any]) -> _Response:
+    def post(
+        self,
+        path: str,
+        json: dict[str, Any],
+        headers: dict[str, str] | None = None,
+    ) -> _Response:
         route = self.app.routes[("POST", path)]
-        body = route.handler(json)
-        return _Response(status_code=200, _body=body)
+        payload = dict(json)
+        if headers:
+            payload["_headers"] = headers
+        body = route.handler(payload)
+        status_code = int(body.get("_status_code", 200))
+        body.pop("_status_code", None)
+        return _Response(status_code=status_code, _body=body)

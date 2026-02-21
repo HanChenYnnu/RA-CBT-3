@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from baselines.B0_static.harness import run_b0_scenario
+from baselines.B1_ip_allowlist.harness import run_b1_scenario
 from experiments.scenarios import SCENARIOS
 from experiments.types import EventRow
 
@@ -20,14 +21,16 @@ def run_selected(*, baselines: list[str], scenarios: list[str], out_dir: Path) -
     raw_dir.mkdir(parents=True, exist_ok=True)
 
     for baseline in baselines:
-        if baseline != "B0":
-            continue
         for scenario in scenarios:
             n = SCENARIOS.get(scenario, 0)
-            if scenario != "S4_burst" or n <= 0:
+            if scenario not in {"S4_burst", "S6_drift"} or n <= 0:
                 continue
             log_path = raw_dir / f"{baseline}_{scenario}.jsonl"
             if log_path.exists():
                 log_path.unlink()
-            events.extend(run_b0_scenario(scenario=scenario, n=n, log_path=log_path))
+
+            if baseline == "B0":
+                events.extend(run_b0_scenario(scenario=scenario, n=n, log_path=log_path))
+            elif baseline == "B1":
+                events.extend(run_b1_scenario(scenario=scenario, n=n, log_path=log_path))
     return events
