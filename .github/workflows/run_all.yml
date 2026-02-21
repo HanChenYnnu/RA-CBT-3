@@ -25,4 +25,3 @@ jobs:
             results/report.csv
             results/report.md
             results/plots/*.svg
-            results/plots/*.png
