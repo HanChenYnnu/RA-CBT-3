@@ -1,0 +1,28 @@
+name: run_all
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-all:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Execute all
+        run: python -m scripts.run_all
+      - name: Upload results artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-all-results
+          path: |
+            results/report.csv
+            results/report.md
+            results/plots/*.svg
+            results/plots/*.png

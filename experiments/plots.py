@@ -1,0 +1,16 @@
+"""SVG plot helpers."""
+
+from pathlib import Path
+
+PLOTS_DIR = Path("results/plots")
+
+
+def svg_template(title: str) -> str:
+    return (
+        "<svg xmlns='http://www.w3.org/2000/svg' width='480' height='200'>"
+        "<rect width='100%' height='100%' fill='white'/>"
+        f"<text x='20' y='40' font-size='20'>{title}</text>"
+        "<line x1='20' y1='160' x2='440' y2='160' stroke='black'/>"
+        "<line x1='20' y1='160' x2='20' y2='40' stroke='black'/>"
+        "</svg>"
+    )
