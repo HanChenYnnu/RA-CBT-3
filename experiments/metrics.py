@@ -1,0 +1,135 @@
+"""Metrics computation with multi-seed aggregation and B4 AUROC."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import math
+
+from experiments.types import EventRow
+
+
+@dataclass(frozen=True)
+class MetricRow:
+    baseline: str
+    scenario: str
+    attack_success_rate_mean: float
+    attack_success_rate_std: float
+    cost_leakage_tokens_mean: float
+    cost_leakage_tokens_std: float
+    false_reject_rate_mean: float
+    false_reject_rate_std: float
+    throttle_rate_mean: float
+    throttle_rate_std: float
+    p50_ms_mean: float
+    p50_ms_std: float
+    p95_ms_mean: float
+    p95_ms_std: float
+
+
+@dataclass(frozen=True)
+class RiskPoint:
+    fpr: float
+    tpr: float
+
+
+def _percentile(values: list[int], percentile: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    index = int(round((len(ordered) - 1) * percentile))
+    return float(ordered[index])
+
+
+def _mean_std(values: list[float]) -> tuple[float, float]:
+    if not values:
+        return (0.0, 0.0)
+    m = sum(values) / len(values)
+    v = sum((x - m) ** 2 for x in values) / len(values)
+    return (m, math.sqrt(v))
+
+
+def _seed_metric(bucket: list[EventRow]) -> tuple[float, float, float, float, float, float]:
+    total = len(bucket)
+    success_ok = sum(1 for row in bucket if 200 <= row.status_code < 300 and row.reason == "ok")
+    asr = 0.0 if total == 0 else success_ok / total
+    cost = float(sum(row.usage_total_tokens for row in bucket if row.usage_total_tokens > 0))
+    benign = [row for row in bucket if row.benign]
+    benign_den = max(1, len(benign))
+    frr = sum(1 for row in benign if row.decision == "deny") / benign_den
+    throttle = sum(1 for row in benign if row.decision == "throttle") / benign_den
+    latencies = [row.latency_ms for row in bucket]
+    return (asr, cost, frr, throttle, _percentile(latencies, 0.5), _percentile(latencies, 0.95))
+
+
+def compute_metrics(events: list[EventRow]) -> list[MetricRow]:
+    grouped: dict[tuple[str, str], dict[int, list[EventRow]]] = {}
+    for event in events:
+        grouped.setdefault((event.baseline, event.scenario), {}).setdefault(event.seed, []).append(event)
+
+    rows: list[MetricRow] = []
+    for (baseline, scenario), by_seed in sorted(grouped.items()):
+        asr_vals: list[float] = []
+        cost_vals: list[float] = []
+        frr_vals: list[float] = []
+        thr_vals: list[float] = []
+        p50_vals: list[float] = []
+        p95_vals: list[float] = []
+        for seed_bucket in by_seed.values():
+            asr, cost, frr, thr, p50, p95 = _seed_metric(seed_bucket)
+            asr_vals.append(asr)
+            cost_vals.append(cost)
+            frr_vals.append(frr)
+            thr_vals.append(thr)
+            p50_vals.append(p50)
+            p95_vals.append(p95)
+
+        rows.append(
+            MetricRow(
+                baseline=baseline,
+                scenario=scenario,
+                attack_success_rate_mean=_mean_std(asr_vals)[0],
+                attack_success_rate_std=_mean_std(asr_vals)[1],
+                cost_leakage_tokens_mean=_mean_std(cost_vals)[0],
+                cost_leakage_tokens_std=_mean_std(cost_vals)[1],
+                false_reject_rate_mean=_mean_std(frr_vals)[0],
+                false_reject_rate_std=_mean_std(frr_vals)[1],
+                throttle_rate_mean=_mean_std(thr_vals)[0],
+                throttle_rate_std=_mean_std(thr_vals)[1],
+                p50_ms_mean=_mean_std(p50_vals)[0],
+                p50_ms_std=_mean_std(p50_vals)[1],
+                p95_ms_mean=_mean_std(p95_vals)[0],
+                p95_ms_std=_mean_std(p95_vals)[1],
+            )
+        )
+    return rows
+
+
+def compute_b4_auroc(events: list[EventRow]) -> tuple[float, list[RiskPoint]]:
+    pts = [e for e in events if e.baseline == "B4" and e.risk >= 0.0]
+    if not pts:
+        return (0.0, [])
+    thresholds = sorted({round(e.risk, 4) for e in pts})
+    if 1.0 not in thresholds:
+        thresholds.append(1.0)
+    if 0.0 not in thresholds:
+        thresholds.insert(0, 0.0)
+
+    roc: list[RiskPoint] = []
+    pos = [e for e in pts if e.label == "attack"]
+    neg = [e for e in pts if e.label == "benign"]
+    for t in thresholds:
+        tp = sum(1 for e in pos if e.risk >= t)
+        fn = max(1, len(pos)) - tp
+        fp = sum(1 for e in neg if e.risk >= t)
+        tn = max(1, len(neg)) - fp
+        tpr = tp / max(1, (tp + fn))
+        fpr = fp / max(1, (fp + tn))
+        roc.append(RiskPoint(fpr=fpr, tpr=tpr))
+
+    roc = sorted(roc, key=lambda p: p.fpr)
+    area = 0.0
+    for i in range(1, len(roc)):
+        x0, y0 = roc[i - 1].fpr, roc[i - 1].tpr
+        x1, y1 = roc[i].fpr, roc[i].tpr
+        area += (x1 - x0) * (y0 + y1) / 2.0
+    return (max(0.0, min(1.0, area)), roc)
