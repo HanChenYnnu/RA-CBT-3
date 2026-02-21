@@ -14,64 +14,40 @@ SCENARIOS = {
 }
 
 
+def _default_request(scenario: str, idx: int) -> dict[str, object]:
+    return {
+        "model": "gpt-mock",
+        "scenario": scenario,
+        "request_id": f"{scenario}-{idx}",
+        "messages": [{"role": "user", "content": f"{scenario} payload {idx}"}],
+        "max_tokens": 24,
+        "x_forwarded_for": "10.0.0.10",
+    }
+
+
 def scenario_requests(scenario: str, n: int) -> list[dict[str, object]]:
     requests: list[dict[str, object]] = []
+
     if scenario == "S4_burst":
         for idx in range(n):
-            text = "burst load " + ("x" * ((idx % 20) + 20))
-            requests.append(
-                {
-                    "model": "gpt-mock",
-                    "scenario": scenario,
-                    "request_id": f"{scenario}-{idx}",
-                    "messages": [{"role": "user", "content": text}],
-                    "max_tokens": 32 + (idx % 64),
-                    "x_forwarded_for": "10.0.0.10",
-                }
-            )
+            req = _default_request(scenario, idx)
+            req["messages"] = [
+                {"role": "user", "content": "burst load " + ("x" * ((idx % 20) + 20))}
+            ]
+            req["max_tokens"] = 32 + (idx % 64)
+            requests.append(req)
         return requests
 
     if scenario == "S6_drift":
         boundary = max(1, n // 2)
         for idx in range(n):
-            ip = f"10.0.0.{(idx % 200) + 1}" if idx < boundary else f"203.0.113.{(idx % 200) + 1}"
-            requests.append(
-                {
-                    "model": "gpt-mock",
-                    "scenario": scenario,
-                    "request_id": f"{scenario}-{idx}",
-                    "messages": [{"role": "user", "content": f"drift event {idx}"}],
-                    "max_tokens": 40,
-                    "x_forwarded_for": ip,
-                }
+            req = _default_request(scenario, idx)
+            req["x_forwarded_for"] = (
+                f"10.0.0.{(idx % 200) + 1}" if idx < boundary else f"203.0.113.{(idx % 200) + 1}"
             )
+            requests.append(req)
         return requests
 
-
-    if scenario == "S3_replay":
-        for idx in range(n):
-            requests.append(
-                {
-                    "model": "gpt-mock",
-                    "scenario": scenario,
-                    "request_id": f"{scenario}-{idx}",
-                    "messages": [{"role": "user", "content": f"replay payload {idx}"}],
-                    "max_tokens": 24,
-                }
-            )
-        return requests
-
-    if scenario == "S2_token_leak":
-        for idx in range(n):
-            requests.append(
-                {
-                    "model": "gpt-mock",
-                    "scenario": scenario,
-                    "request_id": f"{scenario}-{idx}",
-                    "messages": [{"role": "user", "content": f"token leak attempt {idx}"}],
-                    "max_tokens": 24,
-                }
-            )
-        return requests
-
+    for idx in range(n):
+        requests.append(_default_request(scenario, idx))
     return requests

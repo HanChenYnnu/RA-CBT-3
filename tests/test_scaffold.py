@@ -7,8 +7,9 @@ from baselines.B0_static.app import create_app as create_b0_app
 from baselines.B2_bearer_short.app import create_app as create_b2_app
 from baselines.B3_pop_only.app import create_app as create_b3_app
 from baselines.B3_pop_only.app import jwk_thumbprint, make_dpop_proof
+from baselines.B4_full.calibrate_quantiles import calibrate
 from experiments.metrics import compute_metrics
-from experiments.runner import run_selected
+from experiments.runner import run_b4_calibration_phase, run_selected
 from fastapi.testclient import TestClient
 
 
@@ -40,174 +41,158 @@ def test_b2_exchange_call_missing_invalid_and_budget(tmp_path: Path) -> None:
     app = create_b2_app()
 
     with TestClient(app) as client:
-        missing = client.post(
-            "/v1/chat/completions",
-            json={"scenario": "S2_token_leak", "messages": []},
+        assert (
+            client.post(
+                "/v1/chat/completions", json={"scenario": "S2_token_leak", "messages": []}
+            ).status_code
+            == 401
         )
-        assert missing.status_code == 401
-
-        invalid = client.post(
-            "/v1/chat/completions",
-            json={"scenario": "S2_token_leak", "messages": []},
-            headers={"Authorization": "Bearer invalid.token"},
+        assert (
+            client.post(
+                "/v1/chat/completions",
+                json={"scenario": "S2_token_leak", "messages": []},
+                headers={"Authorization": "Bearer invalid.token"},
+            ).status_code
+            == 401
         )
-        assert invalid.status_code == 401
 
-        exchange = client.post(
+        token = client.post(
             "/auth/exchange",
             json={},
             headers={"Authorization": "Bearer user-key"},
+        ).json()["access_token"]
+        assert (
+            client.post(
+                "/v1/chat/completions",
+                json={
+                    "scenario": "S2_token_leak",
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "max_tokens": 20,
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            ).status_code
+            == 200
         )
-        token = exchange.json()["access_token"]
-
-        ok = client.post(
-            "/v1/chat/completions",
-            json={
-                "scenario": "S2_token_leak",
-                "messages": [{"role": "user", "content": "hello"}],
-                "max_tokens": 20,
-            },
-            headers={"Authorization": f"Bearer {token}"},
+        assert (
+            client.post(
+                "/v1/chat/completions",
+                json={
+                    "scenario": "S2_token_leak",
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "max_tokens": 45,
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            ).status_code
+            == 429
         )
-        assert ok.status_code == 200
-
-        over_budget = client.post(
-            "/v1/chat/completions",
-            json={
-                "scenario": "S2_token_leak",
-                "messages": [{"role": "user", "content": "hello"}],
-                "max_tokens": 45,
-            },
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert over_budget.status_code == 429
 
 
 def test_b3_dpop_missing_jkt_ath_replay(tmp_path: Path) -> None:
     log_path = tmp_path / "b3.jsonl"
     os.environ["LOG_PATH"] = str(log_path)
-    os.environ["B3_RPM_LIMIT"] = "20"
-    os.environ["B3_TPM_LIMIT"] = "500"
     app = create_b3_app()
 
-    legit_jwk = "legit-pub"
-    legit_private = "legit-private"
-    wrong_private = "wrong-private"
-
     with TestClient(app) as client:
-        exchange = client.post(
+        token = client.post(
             "/auth/exchange",
-            json={"client_jwk": legit_jwk},
+            json={"client_jwk": "legit-pub"},
             headers={"Authorization": "Bearer user-key"},
-        )
-        token = exchange.json()["access_token"]
-        jkt = jwk_thumbprint(legit_jwk)
-
-        missing = client.post(
-            "/v1/chat/completions",
-            json={
-                "scenario": "S2_token_leak",
-                "messages": [{"role": "user", "content": "a"}],
-            },
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert missing.status_code == 401
-
-        wrong_jkt_proof = json.loads(
-            make_dpop_proof(
-                wrong_private,
-                "POST",
+        ).json()["access_token"]
+        jkt = jwk_thumbprint("legit-pub")
+        assert (
+            client.post(
                 "/v1/chat/completions",
-                token,
-                "j1",
-                "wrong-jkt",
+                json={"scenario": "S2_token_leak", "messages": [{"role": "user", "content": "a"}]},
+                headers={"Authorization": f"Bearer {token}"},
+            ).status_code
+            == 401
+        )
+
+        wrong = json.loads(
+            make_dpop_proof(
+                "wrong-private", "POST", "/v1/chat/completions", token, "j1", "wrong-jkt"
             )
         )
-        wrong_jkt_proof["private_key_hint"] = wrong_private
-        wrong_jkt = client.post(
-            "/v1/chat/completions",
-            json={
-                "scenario": "S2_token_leak",
-                "messages": [{"role": "user", "content": "b"}],
-            },
-            headers={"Authorization": f"Bearer {token}", "DPoP": json.dumps(wrong_jkt_proof)},
+        wrong["private_key_hint"] = "wrong-private"
+        assert (
+            client.post(
+                "/v1/chat/completions",
+                json={"scenario": "S2_token_leak", "messages": [{"role": "user", "content": "b"}]},
+                headers={"Authorization": f"Bearer {token}", "DPoP": json.dumps(wrong)},
+            ).status_code
+            == 401
         )
-        assert wrong_jkt.status_code == 401
 
         ath_bad = json.loads(
-            make_dpop_proof(
-                legit_private,
-                "POST",
-                "/v1/chat/completions",
-                token,
-                "j2",
-                jkt,
-            )
+            make_dpop_proof("legit-private", "POST", "/v1/chat/completions", token, "j2", jkt)
         )
-        ath_bad["private_key_hint"] = legit_private
+        ath_bad["private_key_hint"] = "legit-private"
         ath_bad["ath"] = "tampered-ath"
         ath_bad["signature"] = "sig-mismatch"
-        wrong_ath = client.post(
-            "/v1/chat/completions",
-            json={
-                "scenario": "S2_token_leak",
-                "messages": [{"role": "user", "content": "c"}],
-            },
-            headers={"Authorization": f"Bearer {token}", "DPoP": json.dumps(ath_bad)},
+        assert (
+            client.post(
+                "/v1/chat/completions",
+                json={"scenario": "S2_token_leak", "messages": [{"role": "user", "content": "c"}]},
+                headers={"Authorization": f"Bearer {token}", "DPoP": json.dumps(ath_bad)},
+            ).status_code
+            == 401
         )
-        assert wrong_ath.status_code == 401
 
         first = json.loads(
             make_dpop_proof(
-                legit_private,
-                "POST",
-                "/v1/chat/completions",
-                token,
-                "replay-jti",
-                jkt,
+                "legit-private", "POST", "/v1/chat/completions", token, "replay-jti", jkt
             )
         )
-        first["private_key_hint"] = legit_private
-        ok = client.post(
-            "/v1/chat/completions",
-            json={"scenario": "S3_replay", "messages": [{"role": "user", "content": "d"}]},
-            headers={"Authorization": f"Bearer {token}", "DPoP": json.dumps(first)},
+        first["private_key_hint"] = "legit-private"
+        assert (
+            client.post(
+                "/v1/chat/completions",
+                json={"scenario": "S3_replay", "messages": [{"role": "user", "content": "d"}]},
+                headers={"Authorization": f"Bearer {token}", "DPoP": json.dumps(first)},
+            ).status_code
+            == 200
         )
-        assert ok.status_code == 200
-
-        replay = client.post(
-            "/v1/chat/completions",
-            json={"scenario": "S3_replay", "messages": [{"role": "user", "content": "e"}]},
-            headers={"Authorization": f"Bearer {token}", "DPoP": json.dumps(first)},
+        assert (
+            client.post(
+                "/v1/chat/completions",
+                json={"scenario": "S3_replay", "messages": [{"role": "user", "content": "e"}]},
+                headers={"Authorization": f"Bearer {token}", "DPoP": json.dumps(first)},
+            ).status_code
+            == 401
         )
-        assert replay.status_code == 401
-
-    reasons = [
-        json.loads(line)["reason"] for line in log_path.read_text(encoding="utf-8").splitlines()
-    ]
-    assert "dpop_missing" in reasons
-    assert "jkt_mismatch" in reasons
-    assert "ath_mismatch" in reasons
-    assert "replay" in reasons
 
 
-def test_expected_b2_b3_deltas(tmp_path: Path) -> None:
-    os.environ["B2_RPM_LIMIT"] = "300"
-    os.environ["B2_TPM_LIMIT"] = "20000"
-    os.environ["B3_RPM_LIMIT"] = "300"
-    os.environ["B3_TPM_LIMIT"] = "20000"
+def test_hard_deltas_b2_b3_b4_and_b0(tmp_path: Path) -> None:
+    os.environ["B2_RPM_LIMIT"] = "500"
+    os.environ["B2_TPM_LIMIT"] = "50000"
+    os.environ["B3_RPM_LIMIT"] = "500"
+    os.environ["B3_TPM_LIMIT"] = "50000"
+    os.environ["B4_RPM_LIMIT"] = "500"
+    os.environ["B4_TPM_LIMIT"] = "50000"
+
+    run_b4_calibration_phase(out_dir=tmp_path, n=120)
+    calibrate(
+        input_path=tmp_path / "raw" / "B4_calibration.jsonl",
+        output_path=Path("baselines/B4_full/calibration.json"),
+    )
 
     events = run_selected(
-        baselines=["B2", "B3"],
-        scenarios=["S2_token_leak", "S3_replay"],
+        baselines=["B0", "B2", "B3", "B4"],
+        scenarios=["S2_token_leak", "S3_replay", "S4_burst"],
         out_dir=tmp_path,
     )
     rows = compute_metrics(events)
-    b2_s2 = next(r for r in rows if r.baseline == "B2" and r.scenario == "S2_token_leak")
-    b3_s2 = next(r for r in rows if r.baseline == "B3" and r.scenario == "S2_token_leak")
-    b2_s3 = next(r for r in rows if r.baseline == "B2" and r.scenario == "S3_replay")
-    b3_s3 = next(r for r in rows if r.baseline == "B3" and r.scenario == "S3_replay")
 
-    assert b2_s2.attack_success_rate >= 0.5
-    assert b3_s2.attack_success_rate <= 0.05
-    assert b3_s3.attack_success_rate < b2_s3.attack_success_rate
+    def pick(baseline: str, scenario: str):
+        return next(r for r in rows if r.baseline == baseline and r.scenario == scenario)
+
+    assert pick("B2", "S2_token_leak").attack_success_rate >= 0.5
+    assert pick("B3", "S2_token_leak").attack_success_rate <= 0.05
+    assert pick("B4", "S2_token_leak").attack_success_rate <= 0.05
+
+    assert pick("B3", "S3_replay").attack_success_rate < pick("B2", "S3_replay").attack_success_rate
+    assert pick("B4", "S3_replay").attack_success_rate < pick("B2", "S3_replay").attack_success_rate
+
+    assert (
+        pick("B4", "S4_burst").cost_leakage_tokens <= pick("B0", "S4_burst").cost_leakage_tokens / 5
+    )

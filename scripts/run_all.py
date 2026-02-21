@@ -5,17 +5,18 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from baselines.B4_full.calibrate_quantiles import calibrate
 from experiments.metrics import compute_metrics
 from experiments.plots import generate_plots
 from experiments.report import write_report
-from experiments.runner import run_selected
+from experiments.runner import planned_baselines, run_b4_calibration_phase, run_selected
 from experiments.scenarios import SCENARIOS
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run deterministic experiments.")
     parser.add_argument("--seed", type=int, default=7)
-    parser.add_argument("--baselines", default="B0,B1,B2,B3,B4")
+    parser.add_argument("--baselines", default=",".join(planned_baselines()))
     parser.add_argument("--scenarios", default=",".join(SCENARIOS.keys()))
     parser.add_argument("--out-dir", default="results")
     return parser
@@ -32,6 +33,15 @@ def main() -> None:
     out_dir = Path(args.out_dir)
 
     print(f"[run_all] seed={args.seed} baselines={baselines} scenarios={scenarios}")
+
+    if "B4" in baselines:
+        run_b4_calibration_phase(out_dir=out_dir, n=120)
+        thresholds = calibrate(
+            input_path=out_dir / "raw" / "B4_calibration.jsonl",
+            output_path=Path("baselines/B4_full/calibration.json"),
+        )
+        print(f"[run_all] calibrated B4 thresholds: {thresholds}")
+
     events = run_selected(baselines=baselines, scenarios=scenarios, out_dir=out_dir)
     rows = compute_metrics(events)
     write_report(rows)
