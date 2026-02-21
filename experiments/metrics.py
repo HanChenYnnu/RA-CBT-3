@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from experiments.runner import EventRow
+from experiments.types import EventRow
 
 
 @dataclass(frozen=True)

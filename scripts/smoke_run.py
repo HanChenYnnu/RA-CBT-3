@@ -1,15 +1,17 @@
-"""Synthetic smoke run for stage1 harness."""
+"""Synthetic smoke run for B0 integration."""
 
 from __future__ import annotations
+
+from pathlib import Path
 
 from experiments.metrics import compute_metrics
 from experiments.plots import generate_plots
 from experiments.report import write_report
-from experiments.runner import synthetic_events
+from experiments.runner import run_selected
 
 
 def main() -> None:
-    events = synthetic_events()[:8]
+    events = run_selected(baselines=["B0"], scenarios=["S4_burst"], out_dir=Path("results"))
     rows = compute_metrics(events)
     write_report(rows)
     plots = generate_plots(rows)
