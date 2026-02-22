@@ -1,0 +1,8 @@
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+.venv/
+results/raw/**
+results/plots/*.png
+results/plots/*.jpg
