@@ -1,0 +1,8 @@
+{
+  "tau_allow": 0.0975,
+  "tau_deny": 0.75,
+  "tau_allow_exchange": 0.2505,
+  "tau_deny_exchange": 0.8,
+  "benign_risk_p50": 0.0926,
+  "attack_risk_p50": 0.0
+}
