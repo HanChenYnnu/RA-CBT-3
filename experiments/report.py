@@ -37,7 +37,11 @@ def write_report(rows: list[MetricRow], *, seeds: int, b4_eval: B4RiskEvaluation
         "throttle_rate_mean,throttle_rate_std,p50_ms_mean,p50_ms_std,p95_ms_mean,p95_ms_std,"
         "risk_p50_mean,risk_p50_std,risk_p90_mean,risk_p90_std,"
         "attack_allow_count_mean,attack_throttle_count_mean,overall_auroc_mean,overall_prauc_mean,"
-        "non_deny_auroc_mean,non_deny_prauc_mean,ece_official_mean"
+        "non_deny_auroc_mean,non_deny_prauc_mean,ece_official_mean,"
+        "base_attack_rate_non_deny,n_attack_non_deny,n_benign_non_deny,"
+        "non_deny_p_at_10,non_deny_p_at_30,non_deny_p_at_50,"
+        "non_deny_r_at_10,non_deny_r_at_30,non_deny_r_at_50,"
+        "non_deny_lift_at_10,non_deny_lift_at_30,non_deny_lift_at_50"
     )
     lines = [header]
     for r in rows:
@@ -47,7 +51,11 @@ def write_report(rows: list[MetricRow], *, seeds: int, b4_eval: B4RiskEvaluation
             f"{r.throttle_rate_mean:.4f},{r.throttle_rate_std:.4f},{r.p50_ms_mean:.3f},{r.p50_ms_std:.3f},{r.p95_ms_mean:.3f},{r.p95_ms_std:.3f},"
             f"{r.risk_p50_mean:.4f},{r.risk_p50_std:.4f},{r.risk_p90_mean:.4f},{r.risk_p90_std:.4f},"
             f"{r.attack_allow_count_mean:.2f},{r.attack_throttle_count_mean:.2f},{_csv_val(r.overall_auroc_mean)},"
-            f"{_csv_val(r.overall_prauc_mean)},{_csv_val(r.non_deny_auroc_mean)},{_csv_val(r.non_deny_prauc_mean)},{_csv_val(r.ece_official_mean)}"
+            f"{_csv_val(r.overall_prauc_mean)},{_csv_val(r.non_deny_auroc_mean)},{_csv_val(r.non_deny_prauc_mean)},{_csv_val(r.ece_official_mean)},"
+            f"{_csv_val(r.base_attack_rate_non_deny)},{_csv_val(r.n_attack_non_deny)},{_csv_val(r.n_benign_non_deny)},"
+            f"{_csv_val(r.non_deny_p_at_10)},{_csv_val(r.non_deny_p_at_30)},{_csv_val(r.non_deny_p_at_50)},"
+            f"{_csv_val(r.non_deny_r_at_10)},{_csv_val(r.non_deny_r_at_30)},{_csv_val(r.non_deny_r_at_50)},"
+            f"{_csv_val(r.non_deny_lift_at_10)},{_csv_val(r.non_deny_lift_at_30)},{_csv_val(r.non_deny_lift_at_50)}"
         )
     REPORT_CSV.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -73,6 +81,10 @@ def write_report(rows: list[MetricRow], *, seeds: int, b4_eval: B4RiskEvaluation
     if b4_eval.calibration_fallback_used:
         md.append("- Calibration fallback used (calibrated worsened).")
 
+    md += ["", "## Served-traffic ranking quality", "", "| slice | base_attack_rate_non_deny | P@10 | P@30 | P@50 | R@10 | R@30 | R@50 | lift@10 | lift@30 | lift@50 | n_attack_non_deny | n_benign_non_deny |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    for s in b4_eval.served_traffic_slices:
+        md.append(f"| {s.name} | {_fmt(s.base_attack_rate_non_deny)} | {_fmt(s.non_deny_p_at_10)} | {_fmt(s.non_deny_p_at_30)} | {_fmt(s.non_deny_p_at_50)} | {_fmt(s.non_deny_r_at_10)} | {_fmt(s.non_deny_r_at_30)} | {_fmt(s.non_deny_r_at_50)} | {_fmt(s.non_deny_lift_at_10)} | {_fmt(s.non_deny_lift_at_30)} | {_fmt(s.non_deny_lift_at_50)} | {s.n_attack_non_deny} | {s.n_benign_non_deny} |")
+
     md += [
         "", "## Confusion matrix @ ~1% benign FPR operating point",
         f"- Threshold: **{b4_eval.operating_point_threshold:.4f}**",
@@ -85,7 +97,6 @@ def write_report(rows: list[MetricRow], *, seeds: int, b4_eval: B4RiskEvaluation
 
     if calibration:
         md += ["", "## B4 calibration thresholds", f"- tau_allow={calibration.get('tau_allow', 0.0):.4f}, tau_deny={calibration.get('tau_deny', 0.0):.4f}"]
-
 
     md += [
         "",
@@ -107,6 +118,13 @@ def write_report(rows: list[MetricRow], *, seeds: int, b4_eval: B4RiskEvaluation
         md += ["", "## B4 risk distribution (group-wise)", "", "| group | n | p50 | p90 |", "|---|---:|---:|---:|"]
         for group, stats in risk_summary.items():
             md.append(f"| {group} | {int(stats['n'])} | {stats['p50']:.4f} | {stats['p90']:.4f} |")
+
+    sweep_rows = [r for r in rows if r.baseline == "B4" and r.scenario.startswith("S4_budget_sweep_x")]
+    if sweep_rows:
+        md += ["", "## Budget sweep (B4)", "", "| scenario | scale | SR | ASR_allow | ASR_non_deny | cost_leakage_tokens | throttle_rate | p95_ms |", "|---|---:|---:|---:|---:|---:|---:|---:|"]
+        for r in sorted(sweep_rows, key=lambda x: x.scenario, reverse=True):
+            scale = r.scenario.split("_x")[-1]
+            md.append(f"| {r.scenario} | {scale} | {r.success_rate_mean:.4f} | {r.attack_success_rate_allow_mean:.4f} | {r.attack_success_rate_non_deny_mean:.4f} | {r.cost_leakage_tokens_mean:.2f} | {r.throttle_rate_mean:.4f} | {r.p95_ms_mean:.3f} |")
 
     md += ["", "| baseline | scenario | SR (mean±std) | ASR_allow (mean±std) | ASR_non_deny (mean±std) | cost (mean±std) | FRR (mean±std) | throttle (mean±std) | p95 ms (mean±std) | attack allow | attack throttle |", "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for r in rows:

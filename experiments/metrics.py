@@ -42,6 +42,18 @@ class MetricRow:
     non_deny_auroc_mean: float
     non_deny_prauc_mean: float
     ece_official_mean: float
+    base_attack_rate_non_deny: float
+    n_attack_non_deny: float
+    n_benign_non_deny: float
+    non_deny_p_at_10: float
+    non_deny_p_at_30: float
+    non_deny_p_at_50: float
+    non_deny_r_at_10: float
+    non_deny_r_at_30: float
+    non_deny_r_at_50: float
+    non_deny_lift_at_10: float
+    non_deny_lift_at_30: float
+    non_deny_lift_at_50: float
 
 
 @dataclass(frozen=True)
@@ -75,6 +87,24 @@ class LosoRow:
 
 
 @dataclass(frozen=True)
+class ServedTrafficSlice:
+    name: str
+    non_deny_total: int
+    n_attack_non_deny: int
+    n_benign_non_deny: int
+    base_attack_rate_non_deny: float | None
+    non_deny_p_at_10: float | None
+    non_deny_p_at_30: float | None
+    non_deny_p_at_50: float | None
+    non_deny_r_at_10: float | None
+    non_deny_r_at_30: float | None
+    non_deny_r_at_50: float | None
+    non_deny_lift_at_10: float | None
+    non_deny_lift_at_30: float | None
+    non_deny_lift_at_50: float | None
+
+
+@dataclass(frozen=True)
 class B4RiskEvaluation:
     overall_auroc: float | None
     overall_pr_auc: float | None
@@ -92,7 +122,10 @@ class B4RiskEvaluation:
     roc_points: list[RiskPoint]
     pr_points: list[RiskPoint]
     non_deny_pr_points: list[RiskPoint]
+    non_deny_attack_cdf_points: list[RiskPoint]
+    non_deny_benign_cdf_points: list[RiskPoint]
     reliability_bins: list[ReliabilityBin]
+    served_traffic_slices: list[ServedTrafficSlice]
     loso_rows: list[LosoRow]
     loso_mean_pr_auc: float | None
     loso_mean_non_deny_pr_auc: float | None
@@ -250,12 +283,47 @@ def _non_deny_metrics(labels: list[int], scores: list[float]) -> tuple[float | N
     return (au, pr, pts)
 
 
+def _risk_cdf(scores: list[float]) -> list[RiskPoint]:
+    if not scores:
+        return []
+    ordered = sorted(scores)
+    n = len(ordered)
+    return [RiskPoint(v, (i + 1) / n) for i, v in enumerate(ordered)]
+
+
+def _served_topk_metrics(labels: list[int], scores: list[float], name: str) -> ServedTrafficSlice:
+    attack_count = sum(labels)
+    benign_count = len(labels) - attack_count
+    defined = len(labels) >= MIN_NON_DENY and attack_count >= MIN_CLASS_NON_DENY and benign_count >= MIN_CLASS_NON_DENY and len(set(labels)) == 2
+    base_rate = (attack_count / len(labels)) if labels else None
+    if not defined:
+        return ServedTrafficSlice(name, len(labels), attack_count, benign_count, base_rate, None, None, None, None, None, None, None, None, None)
+
+    ranked = sorted(zip(scores, labels), key=lambda x: x[0], reverse=True)
+
+    def _p(k: int) -> float:
+        top = ranked[: min(k, len(ranked))]
+        return (sum(lbl for _, lbl in top) / max(1, len(top))) if top else 0.0
+
+    def _r(k: int) -> float:
+        top = ranked[: min(k, len(ranked))]
+        return sum(lbl for _, lbl in top) / max(1, attack_count)
+
+    p10, p30, p50 = _p(10), _p(30), _p(50)
+    r10, r30, r50 = _r(10), _r(30), _r(50)
+    br = base_rate or 0.0
+    l10 = p10 / br if br > 0 else None
+    l30 = p30 / br if br > 0 else None
+    l50 = p50 / br if br > 0 else None
+    return ServedTrafficSlice(name, len(labels), attack_count, benign_count, base_rate, p10, p30, p50, r10, r30, r50, l10, l30, l50)
+
+
 def compute_b4_risk_evaluation(events: list[EventRow], *, loso_groups: dict[str, list[str]] | None = None) -> B4RiskEvaluation:
     pts = [e for e in events if e.baseline == "B4" and e.risk >= 0.0]
     labels = [1 if e.label == "attack" else 0 for e in pts]
     raw = [e.risk for e in pts]
     if not pts:
-        return B4RiskEvaluation(None, None, None, None, None, None, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, False, [], [], [], [], [], None, None, 0.5, 0, 0, 0, 0)
+        return B4RiskEvaluation(None, None, None, None, None, None, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, False, [], [], [], [], [], [], [], [], None, None, 0.5, 0, 0, 0, 0)
 
     t = _calibrate_temperature(raw, labels)
     cal = _apply_temp(raw, t)
@@ -267,6 +335,8 @@ def compute_b4_risk_evaluation(events: list[EventRow], *, loso_groups: dict[str,
     nd_labels = [1 if e.label == "attack" else 0 for e in non_deny]
     nd_scores = _apply_temp([e.risk for e in non_deny], t)
     nd_auroc, nd_pr, nd_pr_pts = _non_deny_metrics(nd_labels, nd_scores)
+    nd_attack_cdf = _risk_cdf([s for y, s in zip(nd_labels, nd_scores) if y == 1])
+    nd_benign_cdf = _risk_cdf([s for y, s in zip(nd_labels, nd_scores) if y == 0])
 
     fam_au, fam_pr = [], []
     for scenarios in _family_rows().values():
@@ -322,6 +392,15 @@ def compute_b4_risk_evaluation(events: list[EventRow], *, loso_groups: dict[str,
             )
         )
 
+    official_by_id = {id(e): s for e, s in zip(pts, official_scores)}
+    served_slices: list[ServedTrafficSlice] = []
+    for name, held_scenarios in groups.items():
+        sub = [e for e in non_deny if e.scenario in held_scenarios]
+        sub_labels = [1 if e.label == "attack" else 0 for e in sub]
+        sub_scores = [official_by_id[id(e)] for e in sub]
+        served_slices.append(_served_topk_metrics(sub_labels, sub_scores, name=name))
+    served_slices.append(_served_topk_metrics(nd_labels, nd_scores, name="overall"))
+
     return B4RiskEvaluation(
         overall_auroc=overall_auroc,
         overall_pr_auc=overall_pr,
@@ -339,7 +418,10 @@ def compute_b4_risk_evaluation(events: list[EventRow], *, loso_groups: dict[str,
         roc_points=roc_pts,
         pr_points=pr_pts,
         non_deny_pr_points=nd_pr_pts,
+        non_deny_attack_cdf_points=nd_attack_cdf,
+        non_deny_benign_cdf_points=nd_benign_cdf,
         reliability_bins=rel_off,
+        served_traffic_slices=served_slices,
         loso_rows=loso_rows,
         loso_mean_pr_auc=_mean_defined([r.pr_auc for r in loso_rows]),
         loso_mean_non_deny_pr_auc=_mean_defined([r.non_deny_pr_auc for r in loso_rows]),
@@ -356,11 +438,23 @@ def compute_metrics(events: list[EventRow], b4_eval: B4RiskEvaluation | None = N
     for e in events:
         grouped.setdefault((e.baseline, e.scenario), {}).setdefault(e.seed, []).append(e)
 
+    served_lookup = {s.name: s for s in (b4_eval.served_traffic_slices if b4_eval is not None else [])}
     rows: list[MetricRow] = []
     for (baseline, scenario), by_seed in sorted(grouped.items()):
         vals = [_seed_metric(bucket) for bucket in by_seed.values()]
         c = list(zip(*vals))
         is_b4 = baseline == "B4" and b4_eval is not None
+        served_name = ""
+        if scenario in {"S1_key_leak_hard", "S1_benign_control_hard"}:
+            served_name = "S1_pair"
+        elif scenario in {"S2_token_leak_hard", "S2_benign_control_hard"}:
+            served_name = "S2_pair"
+        elif scenario in {"S3_replay_hard", "S3_replay_nearmiss_hard", "S3_benign_control_hard"}:
+            served_name = "S3_pair"
+        elif scenario.startswith("S4_budget_sweep_x"):
+            served_name = "overall"
+        served = served_lookup.get(served_name)
+
         rows.append(
             MetricRow(
                 baseline,
@@ -392,6 +486,18 @@ def compute_metrics(events: list[EventRow], b4_eval: B4RiskEvaluation | None = N
                 b4_eval.non_deny_auroc if is_b4 and b4_eval.non_deny_auroc is not None else float("nan"),
                 b4_eval.non_deny_pr_auc if is_b4 and b4_eval.non_deny_pr_auc is not None else float("nan"),
                 b4_eval.ece_official if is_b4 else float("nan"),
+                served.base_attack_rate_non_deny if served and served.base_attack_rate_non_deny is not None else float("nan"),
+                float(served.n_attack_non_deny) if served else float("nan"),
+                float(served.n_benign_non_deny) if served else float("nan"),
+                served.non_deny_p_at_10 if served and served.non_deny_p_at_10 is not None else float("nan"),
+                served.non_deny_p_at_30 if served and served.non_deny_p_at_30 is not None else float("nan"),
+                served.non_deny_p_at_50 if served and served.non_deny_p_at_50 is not None else float("nan"),
+                served.non_deny_r_at_10 if served and served.non_deny_r_at_10 is not None else float("nan"),
+                served.non_deny_r_at_30 if served and served.non_deny_r_at_30 is not None else float("nan"),
+                served.non_deny_r_at_50 if served and served.non_deny_r_at_50 is not None else float("nan"),
+                served.non_deny_lift_at_10 if served and served.non_deny_lift_at_10 is not None else float("nan"),
+                served.non_deny_lift_at_30 if served and served.non_deny_lift_at_30 is not None else float("nan"),
+                served.non_deny_lift_at_50 if served and served.non_deny_lift_at_50 is not None else float("nan"),
             )
         )
     return rows

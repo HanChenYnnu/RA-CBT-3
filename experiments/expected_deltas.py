@@ -110,3 +110,28 @@ def assert_defensibility_gates(rows: list[MetricRow], b4_eval: B4RiskEvaluation)
     s3_pair = next((r for r in b4_eval.loso_rows if r.heldout_scenario == "S3_pair"), None)
     if s3_pair is None or s3_pair.n_attack_non_deny < 30:
         raise AssertionError("Defensibility failure: S3_pair must include at least 30 non-deny attack samples.")
+
+    s3_served = next((s for s in b4_eval.served_traffic_slices if s.name == "S3_pair"), None)
+    if s3_served is None or s3_served.non_deny_p_at_30 is None or s3_served.non_deny_lift_at_30 is None:
+        raise AssertionError("Defensibility failure: S3_pair served-traffic metrics are undefined.")
+    if s3_served.non_deny_p_at_30 < 0.25:
+        raise AssertionError("Defensibility failure: S3_pair non_deny_p_at_30 below threshold.")
+    if s3_served.non_deny_lift_at_30 < 2.0:
+        raise AssertionError("Defensibility failure: S3_pair lift@30 below threshold.")
+
+
+def assert_budget_sweep_gates(rows: list[MetricRow]) -> None:
+    sweep = sorted([r for r in rows if r.baseline == "B4" and r.scenario.startswith("S4_budget_sweep_x")], key=lambda r: r.scenario, reverse=True)
+    if len(sweep) < 4:
+        raise AssertionError("Budget sweep failed: expected at least 4 sweep rows for B4.")
+
+    costs = [r.cost_leakage_tokens_mean for r in sweep]
+    for i in range(1, len(costs)):
+        if costs[i] > costs[i - 1] * 1.05:
+            raise AssertionError("Budget sweep failed: cost increased as budget scale decreased.")
+
+    baseline = next((r for r in sweep if r.scenario.endswith("x1.00")), None)
+    if baseline is None:
+        raise AssertionError("Budget sweep failed: missing x1.00 baseline point.")
+    if not any(r.attack_success_rate_non_deny_mean >= 0.70 and r.cost_leakage_tokens_mean <= baseline.cost_leakage_tokens_mean * 0.70 for r in sweep):
+        raise AssertionError("Budget sweep failed: no point meets ASR_non_deny>=0.70 with <=70% baseline cost.")

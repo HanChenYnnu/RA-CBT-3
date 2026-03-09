@@ -6,6 +6,7 @@ import hashlib
 
 from experiments.scenario_audit import read_samples
 from experiments.scenario_contract import PAIRED_CONTROLS, get_capabilities, scenario_manifest, validate_manifest
+from experiments.types import EventRow
 
 
 HARD_SCENARIOS = ["S1_key_leak_hard", "S2_token_leak_hard", "S3_replay_hard", "S3_replay_nearmiss_hard"]
@@ -65,3 +66,14 @@ def validate_request_samples(samples: list[dict[str, object]]) -> None:
 
 def validate_from_audit_file() -> None:
     validate_request_samples(read_samples())
+
+
+def validate_served_traffic_preflight(events: list[EventRow]) -> None:
+    s3_non_deny = [e for e in events if e.baseline == "B4" and e.scenario in {"S3_replay_hard", "S3_replay_nearmiss_hard", "S3_benign_control_hard"} and e.decision in {"allow", "throttle"}]
+    n_attack = sum(1 for e in s3_non_deny if e.label == "attack")
+    if n_attack < 30:
+        raise RuntimeError(f"Preflight failed: S3_pair requires >=30 non-deny attacks for B4; got {n_attack}.")
+
+    bad_risk = [e for e in events if e.baseline == "B4" and e.decision in {"allow", "throttle"} and e.risk < 0.0]
+    if bad_risk:
+        raise RuntimeError("Preflight failed: non-deny events include undefined risk (<0).")
