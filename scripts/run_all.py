@@ -8,12 +8,13 @@ from glob import glob
 from pathlib import Path
 
 from baselines.B4_full.calibrate_quantiles import calibrate
-from experiments.expected_deltas import assert_defensibility_gates, assert_required_security_deltas
+from experiments.expected_deltas import assert_budget_sweep_gates, assert_defensibility_gates, assert_required_security_deltas
 from experiments.metrics import compute_b4_risk_evaluation, compute_b4_risk_summary, compute_decision_latency_stats, compute_metrics
+from experiments.budget_sweep import run_b4_budget_sweep
 from experiments.plots import generate_plots
 from experiments.report import write_report
 from experiments.runner import ensure_coverage, planned_baselines, run_b4_calibration_phase, run_selected
-from experiments.preflight import validate_contracts_declared, validate_from_audit_file
+from experiments.preflight import validate_contracts_declared, validate_from_audit_file, validate_served_traffic_preflight
 from experiments.scenario_audit import reset_audit
 from experiments.scenarios import SCENARIOS
 
@@ -88,13 +89,17 @@ def main() -> None:
                 output_path=Path("baselines/B4_full/calibration.json"),
             )
         events.extend(run_selected(baselines=baselines, scenarios=scenarios, out_dir=out_dir, seed=seed))
+        if "B4" in baselines:
+            events.extend(run_b4_budget_sweep(out_dir=out_dir, seed=seed))
 
     validate_from_audit_file()
+    validate_served_traffic_preflight(events)
     b4_eval = compute_b4_risk_evaluation(events, loso_groups=LOSO_GROUPS)
     rows = compute_metrics(events, b4_eval=b4_eval)
     ensure_coverage(rows, baselines, scenarios)
     assert_required_security_deltas(rows)
     assert_defensibility_gates(rows, b4_eval)
+    assert_budget_sweep_gates(rows)
 
     risk_summary = compute_b4_risk_summary(events)
     decision_latency = compute_decision_latency_stats(events, ["B4", "B3"])

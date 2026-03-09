@@ -110,3 +110,34 @@ def assert_defensibility_gates(rows: list[MetricRow], b4_eval: B4RiskEvaluation)
     s3_pair = next((r for r in b4_eval.loso_rows if r.heldout_scenario == "S3_pair"), None)
     if s3_pair is None or s3_pair.n_attack_non_deny < 30:
         raise AssertionError("Defensibility failure: S3_pair must include at least 30 non-deny attack samples.")
+
+    s3_served = next((s for s in b4_eval.served_traffic_slices if s.name == "S3_pair"), None)
+    if s3_served is None or s3_served.p_at_k[30] is None or s3_served.lift_at_k[30] is None:
+        raise AssertionError("Defensibility failure: S3_pair served-traffic metrics are undefined.")
+    if s3_served.p_at_k[30] < 0.25:
+        raise AssertionError("Defensibility failure: S3_pair non_deny_p_at_30 below threshold.")
+    if s3_served.lift_at_k[30] < 3.0:
+        raise AssertionError("Defensibility failure: S3_pair lift@30 below threshold.")
+
+    p30_ci = s3_served.p_ci[30]
+    if p30_ci[0] is None or p30_ci[1] is None or (p30_ci[1] - p30_ci[0]) >= 0.5:
+        raise AssertionError("Defensibility failure: S3_pair p@30 CI width is too wide.")
+
+
+def assert_budget_sweep_gates(rows: list[MetricRow]) -> None:
+    sweep = sorted([r for r in rows if r.baseline == "B4" and r.scenario.startswith("S4_budget_sweep_x")], key=lambda r: r.scenario, reverse=True)
+    if len(sweep) < 4:
+        raise AssertionError("Budget sweep failed: expected at least 4 sweep rows for B4.")
+
+    costs = [r.cost_attack for r in sweep]
+    for i in range(1, len(costs)):
+        if costs[i] > costs[i - 1] * 1.05:
+            raise AssertionError("Budget sweep failed: attack cost increased as budget scale decreased.")
+
+    for r in sweep:
+        if r.sr_benign < 0.90 or r.frr_benign > 0.02:
+            raise AssertionError("Budget sweep failed: benign usability violated.")
+
+    asr = [r.asr_allow_attack for r in sweep]
+    if all(asr[i] < asr[i + 1] for i in range(len(asr) - 1)):
+        raise AssertionError("Budget sweep failed: ASR_allow_attack increases monotonically as scale tightens.")
