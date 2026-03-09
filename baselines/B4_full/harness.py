@@ -103,7 +103,7 @@ def run_b4_scenario(*, scenario: str, n: int, log_path: Path, seed: int) -> list
                 if scenario == "S3_replay_hard":
                     replay = _proof(LEGIT_PRIVATE, owner_token, "s3-replay-hard-fixed", owner_jkt)
                 elif scenario == "S3_replay_nearmiss_hard":
-                    replay = _proof(LEGIT_PRIVATE, owner_token, f"s3-replay-nearmiss-{idx % 30}", owner_jkt)
+                    replay = _proof(LEGIT_PRIVATE, owner_token, f"s3-replay-nearmiss-{idx % 100}", owner_jkt)
                 replay_key = json.loads(replay).get("jti", "")
                 req_ctx = owner_ctx if scenario != "S3_replay_nearmiss_hard" or idx % 3 == 0 else _ctx("10.0.0.77", "AS100", "US", "browser/100.1", "fp-mismatch")
                 req_ip = "10.0.0.11" if req_ctx == owner_ctx else "10.0.0.77"

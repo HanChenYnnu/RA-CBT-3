@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-from experiments.metrics import B4RiskEvaluation, MetricRow
+from experiments.metrics import B4RiskEvaluation, K_VALUES, MetricRow
 from experiments.scenario_contract import PAIRED_CONTROLS
 
 RESULTS_DIR = Path("results")
@@ -35,100 +35,71 @@ def write_report(rows: list[MetricRow], *, seeds: int, b4_eval: B4RiskEvaluation
         "baseline,scenario,success_rate_mean,success_rate_std,attack_success_rate_allow_mean,attack_success_rate_allow_std,attack_success_rate_non_deny_mean,attack_success_rate_non_deny_std,"
         "cost_leakage_tokens_mean,cost_leakage_tokens_std,false_reject_rate_mean,false_reject_rate_std,"
         "throttle_rate_mean,throttle_rate_std,p50_ms_mean,p50_ms_std,p95_ms_mean,p95_ms_std,"
-        "risk_p50_mean,risk_p50_std,risk_p90_mean,risk_p90_std,"
-        "attack_allow_count_mean,attack_throttle_count_mean,overall_auroc_mean,overall_prauc_mean,"
-        "non_deny_auroc_mean,non_deny_prauc_mean,ece_official_mean,"
-        "base_attack_rate_non_deny,n_attack_non_deny,n_benign_non_deny,"
-        "non_deny_p_at_10,non_deny_p_at_30,non_deny_p_at_50,"
-        "non_deny_r_at_10,non_deny_r_at_30,non_deny_r_at_50,"
-        "non_deny_lift_at_10,non_deny_lift_at_30,non_deny_lift_at_50"
+        "risk_p50_mean,risk_p50_std,risk_p90_mean,risk_p90_std,attack_allow_count_mean,attack_throttle_count_mean,"
+        "overall_auroc_mean,overall_prauc_mean,non_deny_auroc_mean,non_deny_prauc_mean,ece_official_mean,"
+        "base_attack_rate_non_deny,n_non_deny,n_attack_non_deny,n_benign_non_deny,"
+        "non_deny_p_at_10,non_deny_p_at_30,non_deny_p_at_50,non_deny_p_at_100,non_deny_p_at_200,"
+        "non_deny_r_at_10,non_deny_r_at_30,non_deny_r_at_50,non_deny_r_at_100,non_deny_r_at_200,"
+        "non_deny_lift_at_10,non_deny_lift_at_30,non_deny_lift_at_50,non_deny_lift_at_100,non_deny_lift_at_200,"
+        "non_deny_p_at_30_ci_low,non_deny_p_at_30_ci_high,non_deny_p_at_100_ci_low,non_deny_p_at_100_ci_high,"
+        "non_deny_lift_at_30_ci_low,non_deny_lift_at_30_ci_high,non_deny_lift_at_100_ci_low,non_deny_lift_at_100_ci_high,"
+        "non_deny_pr_auc_ci_low,non_deny_pr_auc_ci_high,base_attack_rate_ci_low,base_attack_rate_ci_high,"
+        "sr_benign,frr_benign,throttle_benign,p95_benign,asr_allow_attack,asr_non_deny_attack,cost_attack,throttle_attack,p95_attack"
     )
     lines = [header]
     for r in rows:
         lines.append(
             f"{r.baseline},{r.scenario},{r.success_rate_mean:.4f},{r.success_rate_std:.4f},{r.attack_success_rate_allow_mean:.4f},{r.attack_success_rate_allow_std:.4f},{r.attack_success_rate_non_deny_mean:.4f},{r.attack_success_rate_non_deny_std:.4f},"
-            f"{r.cost_leakage_tokens_mean:.2f},{r.cost_leakage_tokens_std:.2f},{r.false_reject_rate_mean:.4f},{r.false_reject_rate_std:.4f},"
-            f"{r.throttle_rate_mean:.4f},{r.throttle_rate_std:.4f},{r.p50_ms_mean:.3f},{r.p50_ms_std:.3f},{r.p95_ms_mean:.3f},{r.p95_ms_std:.3f},"
-            f"{r.risk_p50_mean:.4f},{r.risk_p50_std:.4f},{r.risk_p90_mean:.4f},{r.risk_p90_std:.4f},"
-            f"{r.attack_allow_count_mean:.2f},{r.attack_throttle_count_mean:.2f},{_csv_val(r.overall_auroc_mean)},"
-            f"{_csv_val(r.overall_prauc_mean)},{_csv_val(r.non_deny_auroc_mean)},{_csv_val(r.non_deny_prauc_mean)},{_csv_val(r.ece_official_mean)},"
-            f"{_csv_val(r.base_attack_rate_non_deny)},{_csv_val(r.n_attack_non_deny)},{_csv_val(r.n_benign_non_deny)},"
-            f"{_csv_val(r.non_deny_p_at_10)},{_csv_val(r.non_deny_p_at_30)},{_csv_val(r.non_deny_p_at_50)},"
-            f"{_csv_val(r.non_deny_r_at_10)},{_csv_val(r.non_deny_r_at_30)},{_csv_val(r.non_deny_r_at_50)},"
-            f"{_csv_val(r.non_deny_lift_at_10)},{_csv_val(r.non_deny_lift_at_30)},{_csv_val(r.non_deny_lift_at_50)}"
+            f"{r.cost_leakage_tokens_mean:.2f},{r.cost_leakage_tokens_std:.2f},{r.false_reject_rate_mean:.4f},{r.false_reject_rate_std:.4f},{r.throttle_rate_mean:.4f},{r.throttle_rate_std:.4f},"
+            f"{r.p50_ms_mean:.3f},{r.p50_ms_std:.3f},{r.p95_ms_mean:.3f},{r.p95_ms_std:.3f},{r.risk_p50_mean:.4f},{r.risk_p50_std:.4f},{r.risk_p90_mean:.4f},{r.risk_p90_std:.4f},"
+            f"{r.attack_allow_count_mean:.2f},{r.attack_throttle_count_mean:.2f},{_csv_val(r.overall_auroc_mean)},{_csv_val(r.overall_prauc_mean)},{_csv_val(r.non_deny_auroc_mean)},{_csv_val(r.non_deny_prauc_mean)},{_csv_val(r.ece_official_mean)},"
+            f"{_csv_val(r.base_attack_rate_non_deny)},{_csv_val(r.n_non_deny)},{_csv_val(r.n_attack_non_deny)},{_csv_val(r.n_benign_non_deny)},"
+            f"{_csv_val(r.non_deny_p_at_10)},{_csv_val(r.non_deny_p_at_30)},{_csv_val(r.non_deny_p_at_50)},{_csv_val(r.non_deny_p_at_100)},{_csv_val(r.non_deny_p_at_200)},"
+            f"{_csv_val(r.non_deny_r_at_10)},{_csv_val(r.non_deny_r_at_30)},{_csv_val(r.non_deny_r_at_50)},{_csv_val(r.non_deny_r_at_100)},{_csv_val(r.non_deny_r_at_200)},"
+            f"{_csv_val(r.non_deny_lift_at_10)},{_csv_val(r.non_deny_lift_at_30)},{_csv_val(r.non_deny_lift_at_50)},{_csv_val(r.non_deny_lift_at_100)},{_csv_val(r.non_deny_lift_at_200)},"
+            f"{_csv_val(r.non_deny_p_at_30_ci_low)},{_csv_val(r.non_deny_p_at_30_ci_high)},{_csv_val(r.non_deny_p_at_100_ci_low)},{_csv_val(r.non_deny_p_at_100_ci_high)},"
+            f"{_csv_val(r.non_deny_lift_at_30_ci_low)},{_csv_val(r.non_deny_lift_at_30_ci_high)},{_csv_val(r.non_deny_lift_at_100_ci_low)},{_csv_val(r.non_deny_lift_at_100_ci_high)},"
+            f"{_csv_val(r.non_deny_pr_auc_ci_low)},{_csv_val(r.non_deny_pr_auc_ci_high)},{_csv_val(r.base_attack_rate_ci_low)},{_csv_val(r.base_attack_rate_ci_high)},"
+            f"{_csv_val(r.sr_benign)},{_csv_val(r.frr_benign)},{_csv_val(r.throttle_benign)},{_csv_val(r.p95_benign)},{_csv_val(r.asr_allow_attack)},{_csv_val(r.asr_non_deny_attack)},{_csv_val(r.cost_attack)},{_csv_val(r.throttle_attack)},{_csv_val(r.p95_attack)}"
         )
     REPORT_CSV.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    md = [
-        "# Results Report", "", f"Aggregated over **{seeds} seed(s)** with mean±std summary.", "",
-        "## Paired Controls",
-    ]
+    md = ["# Results Report", "", f"Aggregated over **{seeds} seed(s)** with mean±std summary.", "", "## Paired Controls"]
     for atk, ctrl in PAIRED_CONTROLS.items():
         md.append(f"- {atk} ↔ {ctrl}")
 
-    md += [
-        "", "## B4 risk quality",
-        f"- Overall AUROC: **{_fmt(b4_eval.overall_auroc)}**",
-        f"- Overall PR-AUC: **{_fmt(b4_eval.overall_pr_auc)}**",
-        f"- Non-deny (allow+throttle) AUROC: **{_fmt(b4_eval.non_deny_auroc)}**",
-        f"- Non-deny (allow+throttle) PR-AUC: **{_fmt(b4_eval.non_deny_pr_auc)}**",
-        f"- Macro over attack families (excludes N/A): AUROC **{_fmt(b4_eval.macro_family_auroc)}**, PR-AUC **{_fmt(b4_eval.macro_family_pr_auc)}**",
-        "- Macro metrics definition: average only scenarios/families with both labels; single-class AUROC/PR-AUC are N/A and excluded. MIN_CLASS_NON_DENY: non-deny metrics require >=20 attack and >=20 benign non-deny samples (and MIN_NON_DENY total).",
-        f"- Official Brier/ECE: **{b4_eval.brier_official:.4f} / {b4_eval.ece_official:.4f}**",
-        f"- Calibrated Brier/ECE: **{b4_eval.brier_calibrated:.4f} / {b4_eval.ece_calibrated:.4f}**",
-        f"- Raw Brier/ECE: **{b4_eval.brier_raw:.4f} / {b4_eval.ece_raw:.4f}**",
-    ]
-    if b4_eval.calibration_fallback_used:
-        md.append("- Calibration fallback used (calibrated worsened).")
+    md += ["", "## B4 risk quality", f"- Overall AUROC: **{_fmt(b4_eval.overall_auroc)}**", f"- Overall PR-AUC: **{_fmt(b4_eval.overall_pr_auc)}**", f"- Non-deny (allow+throttle) AUROC: **{_fmt(b4_eval.non_deny_auroc)}**", f"- Non-deny (allow+throttle) PR-AUC: **{_fmt(b4_eval.non_deny_pr_auc)}**"]
 
-    md += ["", "## Served-traffic ranking quality", "", "| slice | base_attack_rate_non_deny | P@10 | P@30 | P@50 | R@10 | R@30 | R@50 | lift@10 | lift@30 | lift@50 | n_attack_non_deny | n_benign_non_deny |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    md += ["", "## Served-traffic ranking quality", ""]
+    md += ["| slice | n_non_deny | n_attack_non_deny | n_benign_non_deny | base_attack_rate_non_deny | P@30 | lift@30 |", "|---|---:|---:|---:|---:|---:|---:|"]
     for s in b4_eval.served_traffic_slices:
-        md.append(f"| {s.name} | {_fmt(s.base_attack_rate_non_deny)} | {_fmt(s.non_deny_p_at_10)} | {_fmt(s.non_deny_p_at_30)} | {_fmt(s.non_deny_p_at_50)} | {_fmt(s.non_deny_r_at_10)} | {_fmt(s.non_deny_r_at_30)} | {_fmt(s.non_deny_r_at_50)} | {_fmt(s.non_deny_lift_at_10)} | {_fmt(s.non_deny_lift_at_30)} | {_fmt(s.non_deny_lift_at_50)} | {s.n_attack_non_deny} | {s.n_benign_non_deny} |")
+        md.append(f"| {s.name} | {s.non_deny_total} | {s.n_attack_non_deny} | {s.n_benign_non_deny} | {_fmt(s.base_attack_rate_non_deny)} | {_fmt(s.p_at_k[30])} | {_fmt(s.lift_at_k[30])} |")
 
-    md += [
-        "", "## Confusion matrix @ ~1% benign FPR operating point",
-        f"- Threshold: **{b4_eval.operating_point_threshold:.4f}**",
-        f"- TP/FP/TN/FN: **{b4_eval.confusion_tp}/{b4_eval.confusion_fp}/{b4_eval.confusion_tn}/{b4_eval.confusion_fn}**",
-        "", "## LOSO evaluation", "", "| heldout_group | AUROC | PR-AUC | non-deny AUROC | non-deny PR-AUC | n_total | n_non_deny | n_attack_non_deny | n_benign_non_deny | ECE | Brier |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
-    ]
+    s3 = next((s for s in b4_eval.served_traffic_slices if s.name == "S3_pair"), None)
+    if s3 is not None:
+        md += ["", "## Bootstrap (B4 S3_pair)", "", "| K | P@K (95% CI) | lift@K (95% CI) |", "|---:|---:|---:|"]
+        for k in [10, 30, 100, 200]:
+            p_lo, p_hi = s3.p_ci[k]
+            l_lo, l_hi = s3.lift_ci[k]
+            md.append(f"| {k} | {_fmt(s3.p_at_k[k])} [{_fmt(p_lo)}, {_fmt(p_hi)}] | {_fmt(s3.lift_at_k[k])} [{_fmt(l_lo)}, {_fmt(l_hi)}] |")
+        md += [f"- non-deny PR-AUC: **{_fmt(s3.non_deny_pr_auc)}** [{_fmt(s3.non_deny_pr_auc_ci_low)}, {_fmt(s3.non_deny_pr_auc_ci_high)}]", f"- base attack rate non-deny: **{_fmt(s3.base_attack_rate_non_deny)}** [{_fmt(s3.base_attack_rate_ci_low)}, {_fmt(s3.base_attack_rate_ci_high)}]", f"- K=200 valid: **{'yes' if s3.non_deny_total >= 200 else 'no'}**"]
+
+    md += ["", "## LOSO evaluation", "", "| heldout_group | non-deny PR-AUC | n_non_deny | n_attack_non_deny | n_benign_non_deny |", "|---|---:|---:|---:|---:|"]
     for r in b4_eval.loso_rows:
-        md.append(f"| {r.heldout_scenario} | {_fmt(r.auroc)} | {_fmt(r.pr_auc)} | {_fmt(r.non_deny_auroc)} | {_fmt(r.non_deny_pr_auc)} | {r.n_total} | {r.n_non_deny} | {r.n_attack_non_deny} | {r.n_benign_non_deny} | {r.ece:.4f} | {r.brier:.4f} |")
-    md.append(f"- LOSO mean non-deny PR-AUC (defined folds only): **{_fmt(b4_eval.loso_mean_non_deny_pr_auc)}**")
-
-    if calibration:
-        md += ["", "## B4 calibration thresholds", f"- tau_allow={calibration.get('tau_allow', 0.0):.4f}, tau_deny={calibration.get('tau_deny', 0.0):.4f}"]
-
-    md += [
-        "",
-        "## Metric definitions",
-        "- SR (success_rate): 2xx + reason=ok over all requests (availability).",
-        "- ASR_allow: decision=allow and 2xx + reason=ok over all requests (default attack success metric).",
-        "- ASR_non_deny: decision in {allow, throttle} and 2xx + reason=ok over all requests.",
-        "- Throttle-first tradeoff: evaluate ASR_non_deny + cost_leakage_tokens + throttle_rate together to show non-deny service preserved while spend is compressed via throttle.",
-    ]
-
-    if decision_latency:
-        md += ["", "## Latency by decision"]
-        for baseline, table in decision_latency.items():
-            md.append(f"- **{baseline}**")
-            for decision, stats in table.items():
-                md.append(f"  - {decision}: n={int(stats['n'])}, mean={stats['mean']:.3f}ms, p95={stats['p95']:.3f}ms")
-
-    if risk_summary:
-        md += ["", "## B4 risk distribution (group-wise)", "", "| group | n | p50 | p90 |", "|---|---:|---:|---:|"]
-        for group, stats in risk_summary.items():
-            md.append(f"| {group} | {int(stats['n'])} | {stats['p50']:.4f} | {stats['p90']:.4f} |")
+        md.append(f"| {r.heldout_scenario} | {_fmt(r.non_deny_pr_auc)} | {r.n_non_deny} | {r.n_attack_non_deny} | {r.n_benign_non_deny} |")
 
     sweep_rows = [r for r in rows if r.baseline == "B4" and r.scenario.startswith("S4_budget_sweep_x")]
     if sweep_rows:
-        md += ["", "## Budget sweep (B4)", "", "| scenario | scale | SR | ASR_allow | ASR_non_deny | cost_leakage_tokens | throttle_rate | p95_ms |", "|---|---:|---:|---:|---:|---:|---:|---:|"]
+        md += ["", "## Budget sweep (label-split)", "", "### Attack panel", "", "| scale | ASR_allow_attack | ASR_non_deny_attack | cost_attack | throttle_attack | p95_attack |", "|---:|---:|---:|---:|---:|---:|"]
         for r in sorted(sweep_rows, key=lambda x: x.scenario, reverse=True):
-            scale = r.scenario.split("_x")[-1]
-            md.append(f"| {r.scenario} | {scale} | {r.success_rate_mean:.4f} | {r.attack_success_rate_allow_mean:.4f} | {r.attack_success_rate_non_deny_mean:.4f} | {r.cost_leakage_tokens_mean:.2f} | {r.throttle_rate_mean:.4f} | {r.p95_ms_mean:.3f} |")
+            sc = r.scenario.split("_x")[-1]
+            md.append(f"| {sc} | {r.asr_allow_attack:.4f} | {r.asr_non_deny_attack:.4f} | {r.cost_attack:.2f} | {r.throttle_attack:.4f} | {r.p95_attack:.3f} |")
+        md += ["", "### Benign panel", "", "| scale | SR_benign | FRR_benign | throttle_benign | p95_benign |", "|---:|---:|---:|---:|---:|"]
+        for r in sorted(sweep_rows, key=lambda x: x.scenario, reverse=True):
+            sc = r.scenario.split("_x")[-1]
+            md.append(f"| {sc} | {r.sr_benign:.4f} | {r.frr_benign:.4f} | {r.throttle_benign:.4f} | {r.p95_benign:.3f} |")
 
-    md += ["", "| baseline | scenario | SR (mean±std) | ASR_allow (mean±std) | ASR_non_deny (mean±std) | cost (mean±std) | FRR (mean±std) | throttle (mean±std) | p95 ms (mean±std) | attack allow | attack throttle |", "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
-    for r in rows:
-        md.append(f"| {r.baseline} | {r.scenario} | {_pm(r.success_rate_mean, r.success_rate_std)} | {_pm(r.attack_success_rate_allow_mean, r.attack_success_rate_allow_std)} | {_pm(r.attack_success_rate_non_deny_mean, r.attack_success_rate_non_deny_std)} | {_pm(r.cost_leakage_tokens_mean, r.cost_leakage_tokens_std, 2)} | {_pm(r.false_reject_rate_mean, r.false_reject_rate_std)} | {_pm(r.throttle_rate_mean, r.throttle_rate_std)} | {_pm(r.p95_ms_mean, r.p95_ms_std, 3)} | {r.attack_allow_count_mean:.2f} | {r.attack_throttle_count_mean:.2f} |")
+    md += ["", "## Metric definitions", "- SR (success_rate): 2xx + reason=ok over all requests.", "- ASR_allow: decision=allow and 2xx + reason=ok over all requests.", "- ASR_non_deny: decision in {allow, throttle} and 2xx + reason=ok over all requests."]
 
     REPORT_MD.write_text("\n".join(md) + "\n", encoding="utf-8")
     return REPORT_CSV, REPORT_MD
