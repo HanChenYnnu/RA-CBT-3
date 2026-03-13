@@ -9,7 +9,7 @@ from pathlib import Path
 
 from baselines.B4_full.calibrate_quantiles import calibrate
 from experiments.expected_deltas import assert_budget_sweep_gates, assert_defensibility_gates, assert_required_security_deltas
-from experiments.metrics import compute_b4_risk_evaluation, compute_b4_risk_summary, compute_decision_latency_stats, compute_metrics
+from experiments.metrics import compute_b4_risk_evaluation, compute_b4_risk_summary, compute_b4_vs_b2_served_deltas, compute_decision_latency_stats, compute_metrics, compute_served_slices_for_baseline
 from experiments.budget_sweep import run_b4_budget_sweep
 from experiments.plots import generate_plots
 from experiments.report import write_report
@@ -22,7 +22,7 @@ from experiments.scenarios import SCENARIOS
 LOSO_GROUPS = {
     "S1_pair": ["S1_key_leak_hard", "S1_restricted_issuance_hard", "S1_benign_control_hard"],
     "S2_pair": ["S2_token_leak_hard", "S2_delegated_misuse_hard", "S2_benign_control_hard"],
-    "S3_pair": ["S3_replay_hard", "S3_replay_nearmiss_hard", "S3_benign_control_hard"],
+    "S3_pair": ["S3_replay_hard", "S3_replay_nearmiss_hard", "S3_replay_blended_hard", "S3_benign_control_hard"],
 }
 
 
@@ -97,14 +97,16 @@ def main() -> None:
     b4_eval = compute_b4_risk_evaluation(events, loso_groups=LOSO_GROUPS)
     rows = compute_metrics(events, b4_eval=b4_eval)
     ensure_coverage(rows, baselines, scenarios)
+    b2_served = compute_served_slices_for_baseline(events, baseline="B2", groups=LOSO_GROUPS)
+    b4_b2_deltas = compute_b4_vs_b2_served_deltas(events, groups=LOSO_GROUPS)
     assert_required_security_deltas(rows)
-    assert_defensibility_gates(rows, b4_eval)
+    assert_defensibility_gates(rows, b4_eval, b2_served=b2_served, b4_b2_deltas=b4_b2_deltas)
     assert_budget_sweep_gates(rows)
 
     risk_summary = compute_b4_risk_summary(events)
     decision_latency = compute_decision_latency_stats(events, ["B4", "B3"])
-    write_report(rows, seeds=len(seeds), b4_eval=b4_eval, calibration=calibration_summary, risk_summary=risk_summary, decision_latency=decision_latency)
-    plots = generate_plots(rows, b4_eval=b4_eval)
+    write_report(rows, seeds=len(seeds), b4_eval=b4_eval, calibration=calibration_summary, risk_summary=risk_summary, decision_latency=decision_latency, b2_served=b2_served, b4_b2_deltas=b4_b2_deltas)
+    plots = generate_plots(rows, b4_eval=b4_eval, b2_served=b2_served, b4_b2_deltas=b4_b2_deltas)
     print(f"[run_all] events={len(events)} rows={len(rows)} plots={len(plots)} overall_auroc={b4_eval.overall_auroc}")
 
     if publish_results:

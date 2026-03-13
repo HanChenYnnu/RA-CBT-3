@@ -9,7 +9,7 @@ from experiments.scenario_contract import PAIRED_CONTROLS, get_capabilities, sce
 from experiments.types import EventRow
 
 
-HARD_SCENARIOS = ["S1_key_leak_hard", "S1_restricted_issuance_hard", "S2_token_leak_hard", "S2_delegated_misuse_hard", "S3_replay_hard", "S3_replay_nearmiss_hard"]
+HARD_SCENARIOS = ["S1_key_leak_hard", "S1_restricted_issuance_hard", "S2_token_leak_hard", "S2_delegated_misuse_hard", "S3_replay_hard", "S3_replay_nearmiss_hard", "S3_replay_blended_hard"]
 
 
 def validate_contracts_declared(*, baselines: list[str], scenarios: list[str], seed: int, n_by_scenario: dict[str, int]) -> None:
@@ -59,7 +59,7 @@ def validate_request_samples(samples: list[dict[str, object]]) -> None:
             hashed = [_hash_replay_key(k) for k in keys if k]
             if len(set(hashed)) != 1:
                 raise RuntimeError("Preflight violation: S3_replay_hard did not reuse replay key tuple exactly.")
-        if scenario == "S3_replay_nearmiss_hard":
+        if scenario in {"S3_replay_nearmiss_hard", "S3_replay_blended_hard"}:
             keys = [str(s.get("replay_key", "")) for s in subset]
             hashed = [_hash_replay_key(k) for k in keys if k]
             if len(set(hashed)) <= 1:
@@ -84,7 +84,7 @@ def validate_served_traffic_preflight(events: list[EventRow]) -> None:
     pair_scenarios = {
         "S1_pair": {"S1_key_leak_hard", "S1_restricted_issuance_hard", "S1_benign_control_hard"},
         "S2_pair": {"S2_token_leak_hard", "S2_delegated_misuse_hard", "S2_benign_control_hard"},
-        "S3_pair": {"S3_replay_hard", "S3_replay_nearmiss_hard", "S3_benign_control_hard"},
+        "S3_pair": {"S3_replay_hard", "S3_replay_nearmiss_hard", "S3_replay_blended_hard", "S3_benign_control_hard"},
     }
     for name, scenarios in pair_scenarios.items():
         subset = [e for e in events if e.baseline == "B4" and e.scenario in scenarios and e.decision in {"allow", "throttle"}]

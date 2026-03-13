@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from experiments.metrics import B4RiskEvaluation, MetricRow
+from experiments.metrics import B4RiskEvaluation, MetricRow, ServedDeltaRow, ServedTrafficSlice
 
 PLOTS_DIR = Path("results/plots")
 
@@ -57,7 +57,7 @@ def _line_svg(title: str, series: dict[str, list[tuple[float, float]]], xlabel: 
     return path
 
 
-def generate_plots(rows: list[MetricRow], *, b4_eval: B4RiskEvaluation) -> list[Path]:
+def generate_plots(rows: list[MetricRow], *, b4_eval: B4RiskEvaluation, b2_served: dict[str, ServedTrafficSlice] | None = None, b4_b2_deltas: list[ServedDeltaRow] | None = None) -> list[Path]:
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
     out: list[Path] = []
 
@@ -71,6 +71,27 @@ def generate_plots(rows: list[MetricRow], *, b4_eval: B4RiskEvaluation) -> list[
         ks = [k for k in [10, 30, 50, 100, 200] if s3.p_at_k[k] is not None]
         out.append(_line_svg("B4 S3_pair Precision@K (Bootstrap CI)", {"P@K": [(float(k), float(s3.p_at_k[k])) for k in ks]}, "K", "Precision", PLOTS_DIR / "b4_s3_precision_at_k_ci.svg", bands=[([(float(k), float(s3.p_ci[k][0])) for k in ks if s3.p_ci[k][0] is not None], "#1f77b4"), ([(float(k), float(s3.p_ci[k][1])) for k in ks if s3.p_ci[k][1] is not None], "#1f77b4")]))
         out.append(_line_svg("B4 S3_pair Lift@K (Bootstrap CI)", {"lift@K": [(float(k), float(s3.lift_at_k[k])) for k in ks]}, "K", "Lift", PLOTS_DIR / "b4_s3_lift_at_k_ci.svg", bands=[([(float(k), float(s3.lift_ci[k][0])) for k in ks if s3.lift_ci[k][0] is not None], "#d62728"), ([(float(k), float(s3.lift_ci[k][1])) for k in ks if s3.lift_ci[k][1] is not None], "#d62728")]))
+
+
+    if b2_served:
+        for pair_name in ["S1_pair", "S2_pair", "S3_pair"]:
+            b4s = next((s for s in b4_eval.served_traffic_slices if s.name == pair_name), None)
+            b2s = b2_served.get(pair_name)
+            if b4s is None or b2s is None:
+                continue
+            ks = [k for k in [10, 30, 50, 100, 200] if b4s.p_at_k[k] is not None and b2s.p_at_k[k] is not None]
+            if ks:
+                out.append(_line_svg(f"{pair_name} Precision@K: B4 vs B2", {"B4": [(float(k), float(b4s.p_at_k[k])) for k in ks], "B2": [(float(k), float(b2s.p_at_k[k])) for k in ks]}, "K", "Precision", PLOTS_DIR / f"{pair_name.lower()}_b4_vs_b2_precision_at_k.svg", bands=[([(float(k), float(b4s.p_ci[k][0])) for k in ks if b4s.p_ci[k][0] is not None], "#1f77b4"), ([(float(k), float(b4s.p_ci[k][1])) for k in ks if b4s.p_ci[k][1] is not None], "#1f77b4"), ([(float(k), float(b2s.p_ci[k][0])) for k in ks if b2s.p_ci[k][0] is not None], "#d62728"), ([(float(k), float(b2s.p_ci[k][1])) for k in ks if b2s.p_ci[k][1] is not None], "#d62728")]))
+                out.append(_line_svg(f"{pair_name} Lift@K: B4 vs B2", {"B4": [(float(k), float(b4s.lift_at_k[k])) for k in ks], "B2": [(float(k), float(b2s.lift_at_k[k])) for k in ks]}, "K", "Lift", PLOTS_DIR / f"{pair_name.lower()}_b4_vs_b2_lift_at_k.svg", bands=[([(float(k), float(b4s.lift_ci[k][0])) for k in ks if b4s.lift_ci[k][0] is not None], "#1f77b4"), ([(float(k), float(b4s.lift_ci[k][1])) for k in ks if b4s.lift_ci[k][1] is not None], "#1f77b4"), ([(float(k), float(b2s.lift_ci[k][0])) for k in ks if b2s.lift_ci[k][0] is not None], "#d62728"), ([(float(k), float(b2s.lift_ci[k][1])) for k in ks if b2s.lift_ci[k][1] is not None], "#d62728")]))
+
+    if b4_b2_deltas:
+        pts = []
+        for d in b4_b2_deltas:
+            if d.slice_name in {"S1_pair", "S2_pair", "S3_pair"} and d.delta_lift_at_30 is not None:
+                x = float(len(pts) + 1)
+                pts.append((x, float(d.delta_lift_at_30), d.slice_name))
+        if pts:
+            out.append(_line_svg("B4-B2 ΔLift@30 by pair", {"delta": [(x, y) for x, y, _ in pts]}, "pair-index", "ΔLift@30", PLOTS_DIR / "b4_vs_b2_delta_lift30.svg", labels=[(x, y, name) for x, y, name in pts]))
 
     sweep = sorted([r for r in rows if r.baseline == "B4" and r.scenario.startswith("S4_mixedload_sweep_x")], key=lambda r: r.scenario, reverse=True)
     if sweep:

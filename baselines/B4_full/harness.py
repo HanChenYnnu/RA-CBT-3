@@ -103,15 +103,17 @@ def run_b4_scenario(*, scenario: str, n: int, log_path: Path, seed: int) -> list
                 record_sample(scenario=scenario, baseline="B4", caps=manifest, auth_present=True, dpop_present="DPoP" in headers, dpop_valid=dpop_valid, exchange_called=False, replay_key="", asn="AS100", country="US", ua_family="browser", max_tokens=int(req.get("max_tokens", 0)))
                 client.post("/v1/chat/completions", json=req, headers=headers)
 
-        elif scenario in {"S3_replay", "S3_replay_hard", "S3_replay_nearmiss_hard"}:
+        elif scenario in {"S3_replay", "S3_replay_hard", "S3_replay_nearmiss_hard", "S3_replay_blended_hard"}:
             replay = _proof(LEGIT_PRIVATE, owner_token, "s3-replay", owner_jkt)
             for idx, req in enumerate(reqs):
                 if scenario == "S3_replay_hard":
                     replay = _proof(LEGIT_PRIVATE, owner_token, "s3-replay-hard-fixed", owner_jkt)
                 elif scenario == "S3_replay_nearmiss_hard":
                     replay = _proof(LEGIT_PRIVATE, owner_token, f"s3-replay-nearmiss-{idx % 100}", owner_jkt)
+                elif scenario == "S3_replay_blended_hard":
+                    replay = _proof(LEGIT_PRIVATE, owner_token, f"s3-replay-blended-{idx % 200}", owner_jkt)
                 replay_key = json.loads(replay).get("jti", "")
-                req_ctx = owner_ctx if scenario != "S3_replay_nearmiss_hard" or idx % 3 == 0 else _ctx("10.0.0.77", "AS100", "US", "browser/100.1", "fp-mismatch")
+                req_ctx = owner_ctx if scenario not in {"S3_replay_nearmiss_hard", "S3_replay_blended_hard"} or idx % 3 == 0 else _ctx("10.0.0.77", "AS100", "US", "browser/100.1", "fp-mismatch")
                 req_ip = "10.0.0.11" if req_ctx == owner_ctx else "10.0.0.77"
                 validate_request_semantics(scenario=scenario, auth_present=True, dpop_present=True, dpop_valid=True, exchange_called=False)
                 record_sample(scenario=scenario, baseline="B4", caps=manifest, auth_present=True, dpop_present=True, dpop_valid=True, exchange_called=False, replay_key=replay_key, asn="AS100", country="US", ua_family="browser", max_tokens=int(req.get("max_tokens", 0)))

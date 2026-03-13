@@ -60,13 +60,15 @@ def run_b3_scenario(*, scenario: str, n: int, log_path: Path, seed: int) -> list
                 validate_request_semantics(scenario=scenario, auth_present=True, dpop_present="DPoP" in headers, dpop_valid=dpop_valid, exchange_called=False)
                 record_sample(scenario=scenario, baseline="B3", caps=manifest, auth_present=True, dpop_present="DPoP" in headers, dpop_valid=dpop_valid, exchange_called=False, replay_key="", asn="AS100", country="US", ua_family="browser", max_tokens=int(req.get("max_tokens", 0)))
                 client.post("/v1/chat/completions", json=req, headers=headers)
-        elif scenario in {"S3_replay", "S3_replay_hard", "S3_replay_nearmiss_hard"}:
+        elif scenario in {"S3_replay", "S3_replay_hard", "S3_replay_nearmiss_hard", "S3_replay_blended_hard"}:
             replay = _proof(LEGIT_PRIVATE, victim_token, "s3-replay", victim_jkt)
             for idx, req in enumerate(requests):
                 if scenario == "S3_replay_hard":
                     replay = _proof(LEGIT_PRIVATE, victim_token, "s3-replay-hard-fixed", victim_jkt)
                 elif scenario == "S3_replay_nearmiss_hard":
                     replay = _proof(LEGIT_PRIVATE, victim_token, f"s3-replay-nearmiss-{idx % 30}", victim_jkt)
+                elif scenario == "S3_replay_blended_hard":
+                    replay = _proof(LEGIT_PRIVATE, victim_token, f"s3-replay-blended-{idx % 80}", victim_jkt)
                 replay_key = json.loads(replay).get("jti", "")
                 validate_request_semantics(scenario=scenario, auth_present=True, dpop_present=True, dpop_valid=True, exchange_called=False)
                 record_sample(scenario=scenario, baseline="B3", caps=manifest, auth_present=True, dpop_present=True, dpop_valid=True, exchange_called=False, replay_key=replay_key, asn="AS100", country="US", ua_family="browser", max_tokens=int(req.get("max_tokens", 0)))

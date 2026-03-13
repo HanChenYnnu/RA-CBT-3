@@ -34,3 +34,9 @@ def test_s2_delegated_misuse_contract() -> None:
     assert c.has_dpop_private_key is True
     assert c.can_exchange_token is False
     assert c.label == "attack"
+
+
+def test_s3_replay_blended_contract() -> None:
+    c = get_capabilities("S3_replay_blended_hard")
+    assert c.label == "attack"
+    assert c.replay_mode == "near_miss_replay"

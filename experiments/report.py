@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-from experiments.metrics import B4RiskEvaluation, K_VALUES, MetricRow
+from experiments.metrics import B4RiskEvaluation, K_VALUES, MetricRow, ServedDeltaRow, ServedTrafficSlice
 from experiments.scenario_contract import PAIRED_CONTROLS
 
 RESULTS_DIR = Path("results")
@@ -29,7 +29,7 @@ def _csv_val(v: float | None) -> str:
     return f"{v:.4f}"
 
 
-def write_report(rows: list[MetricRow], *, seeds: int, b4_eval: B4RiskEvaluation, calibration: dict[str, float] | None = None, risk_summary: dict[str, dict[str, float]] | None = None, decision_latency: dict[str, dict[str, dict[str, float]]] | None = None) -> tuple[Path, Path]:
+def write_report(rows: list[MetricRow], *, seeds: int, b4_eval: B4RiskEvaluation, calibration: dict[str, float] | None = None, risk_summary: dict[str, dict[str, float]] | None = None, decision_latency: dict[str, dict[str, dict[str, float]]] | None = None, b2_served: dict[str, ServedTrafficSlice] | None = None, b4_b2_deltas: list[ServedDeltaRow] | None = None) -> tuple[Path, Path]:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     header = (
         "baseline,scenario,success_rate_mean,success_rate_std,attack_success_rate_allow_mean,attack_success_rate_allow_std,attack_success_rate_non_deny_mean,attack_success_rate_non_deny_std,"
@@ -86,6 +86,24 @@ def write_report(rows: list[MetricRow], *, seeds: int, b4_eval: B4RiskEvaluation
             l_lo, l_hi = sp.lift_ci[k]
             md.append(f"| {k} | {_fmt(sp.p_at_k[k])} [{_fmt(p_lo)}, {_fmt(p_hi)}] | {_fmt(sp.lift_at_k[k])} [{_fmt(l_lo)}, {_fmt(l_hi)}] |")
         md += [f"- non-deny PR-AUC: **{_fmt(sp.non_deny_pr_auc)}** [{_fmt(sp.non_deny_pr_auc_ci_low)}, {_fmt(sp.non_deny_pr_auc_ci_high)}]", f"- base attack rate non-deny: **{_fmt(sp.base_attack_rate_non_deny)}** [{_fmt(sp.base_attack_rate_ci_low)}, {_fmt(sp.base_attack_rate_ci_high)}]"]
+
+
+    if b2_served:
+        md += ["", "## B4 vs B2 served-traffic comparison", "", "| slice | B4 P@30 [CI] | B2 P@30 [CI] | ΔPR-AUC [CI] | ΔLift@30 [CI] | ΔLift@100 [CI] |", "|---|---:|---:|---:|---:|---:|"]
+        delta_lookup = {d.slice_name: d for d in (b4_b2_deltas or [])}
+        for pair_name in ["S1_pair", "S2_pair", "S3_pair", "overall"]:
+            b4s = next((s for s in b4_eval.served_traffic_slices if s.name == pair_name), None)
+            b2s = b2_served.get(pair_name)
+            d = delta_lookup.get(pair_name)
+            if b4s is None or b2s is None or d is None:
+                continue
+            md.append(
+                f"| {pair_name} | {_fmt(b4s.p_at_k[30])} [{_fmt(b4s.p_ci[30][0])}, {_fmt(b4s.p_ci[30][1])}] | "
+                f"{_fmt(b2s.p_at_k[30])} [{_fmt(b2s.p_ci[30][0])}, {_fmt(b2s.p_ci[30][1])}] | "
+                f"{_fmt(d.delta_pr_auc)} [{_fmt(d.delta_pr_auc_ci_low)}, {_fmt(d.delta_pr_auc_ci_high)}] | "
+                f"{_fmt(d.delta_lift_at_30)} [{_fmt(d.delta_lift_at_30_ci_low)}, {_fmt(d.delta_lift_at_30_ci_high)}] | "
+                f"{_fmt(d.delta_lift_at_100)} [{_fmt(d.delta_lift_at_100_ci_low)}, {_fmt(d.delta_lift_at_100_ci_high)}] |"
+            )
 
     md += ["", "## LOSO evaluation", "", "| heldout_group | non-deny PR-AUC | n_non_deny | n_attack_non_deny | n_benign_non_deny |", "|---|---:|---:|---:|---:|"]
     for r in b4_eval.loso_rows:

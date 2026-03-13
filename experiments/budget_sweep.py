@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 
-from baselines.B4_full.harness import _ctx, _exchange, _proof, LEGIT_JWK, LEGIT_PRIVATE, run_b4_scenario
+from baselines.B4_full.harness import _ctx, _exchange, _proof, LEGIT_JWK, LEGIT_PRIVATE
 from baselines.B4_full.app import create_app
 from experiments.adapters import scenario_label
 from experiments.scenarios import scenario_requests
@@ -15,10 +15,11 @@ from fastapi.testclient import TestClient
 
 SCALES = [1.00, 0.70, 0.50, 0.35, 0.25]
 SWEEP_COUNTS = {
-    "S3_replay_nearmiss_hard": 36,
-    "S1_restricted_issuance_hard": 36,
-    "S2_delegated_misuse_hard": 36,
-    "S3_benign_control_hard": 120,
+    "S3_replay_nearmiss_hard": 44,
+    "S3_replay_blended_hard": 44,
+    "S1_restricted_issuance_hard": 44,
+    "S2_delegated_misuse_hard": 44,
+    "S3_benign_control_hard": 140,
 }
 
 
@@ -93,9 +94,9 @@ def run_b4_budget_sweep(*, out_dir: Path, seed: int) -> list[EventRow]:
 
     sweep_events: list[EventRow] = []
     for scale in SCALES:
-        os.environ["B4_RPM_LIMIT"] = str(_scaled(160, scale))
-        os.environ["B4_TPM_LIMIT"] = str(_scaled(2200, scale))
-        os.environ["B4_MAXTOK_SCALE"] = f"{scale:.2f}"
+        os.environ["B4_RPM_LIMIT"] = str(_scaled(150, scale))
+        os.environ["B4_TPM_LIMIT"] = str(_scaled(2100, scale))
+        os.environ["B4_MAXTOK_SCALE"] = "1.00"
         sweep_events.extend(_run_mixedload_for_scale(out_dir=out_dir, seed=seed, scale=scale))
 
     for k, v in prior.items():

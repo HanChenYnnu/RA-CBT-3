@@ -25,6 +25,7 @@ PAIRED_CONTROLS = {
     "S2_delegated_misuse_hard": "S2_benign_control_hard",
     "S3_replay_hard": "S3_benign_control_hard",
     "S3_replay_nearmiss_hard": "S3_benign_control_hard",
+    "S3_replay_blended_hard": "S3_benign_control_hard",
 }
 
 
@@ -42,6 +43,7 @@ SCENARIO_CAPABILITIES: dict[str, ScenarioCapabilities] = {
     "S3_replay": ScenarioCapabilities(False, True, True, False, "exact_replay", ("jti", "ath", "signature"), "easy", "attack", None),
     "S3_replay_hard": ScenarioCapabilities(False, True, True, False, "timing_replay", ("jti", "ath", "signature"), "hard", "attack", "S3_benign_control_hard"),
     "S3_replay_nearmiss_hard": ScenarioCapabilities(False, True, True, False, "near_miss_replay", ("ath", "signature"), "hard", "attack", "S3_benign_control_hard"),
+    "S3_replay_blended_hard": ScenarioCapabilities(False, True, True, False, "near_miss_replay", ("ath", "signature"), "hard", "attack", "S3_benign_control_hard"),
     "S3_benign_control_hard": ScenarioCapabilities(True, True, True, True, "none", tuple(), "hard", "benign", None),
 }
 

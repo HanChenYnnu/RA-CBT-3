@@ -3,8 +3,9 @@ import os
 
 from baselines.B4_full.calibrate_quantiles import calibrate
 from experiments.expected_deltas import assert_defensibility_gates, assert_required_security_deltas
-from experiments.metrics import compute_b4_risk_evaluation, compute_metrics
+from experiments.metrics import compute_b4_risk_evaluation, compute_b4_vs_b2_served_deltas, compute_metrics, compute_served_slices_for_baseline
 from experiments.runner import ensure_coverage, run_b4_calibration_phase, run_selected
+from scripts.run_all import LOSO_GROUPS
 from experiments.scenarios import ALL_SCENARIOS
 
 
@@ -23,13 +24,15 @@ def _run_full(tmp_path: Path):
     b4_eval = compute_b4_risk_evaluation(events)
     rows = compute_metrics(events, b4_eval=b4_eval)
     ensure_coverage(rows, ["B0", "B1", "B2", "B3", "B4"], ALL_SCENARIOS)
-    return rows, b4_eval
+    b2_served = compute_served_slices_for_baseline(events, baseline="B2", groups=LOSO_GROUPS)
+    deltas = compute_b4_vs_b2_served_deltas(events, groups=LOSO_GROUPS, bootstrap_n=50)
+    return rows, b4_eval, b2_served, deltas
 
 
 def test_security_and_gates(tmp_path: Path) -> None:
-    rows, b4_eval = _run_full(tmp_path)
+    rows, b4_eval, b2_served, deltas = _run_full(tmp_path)
     assert_required_security_deltas(rows)
-    assert_defensibility_gates(rows, b4_eval)
+    assert_defensibility_gates(rows, b4_eval, b2_served=b2_served, b4_b2_deltas=deltas)
 
 
 def test_coverage_gate_fails_on_missing() -> None:
