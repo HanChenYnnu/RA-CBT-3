@@ -89,8 +89,9 @@ def validate_served_traffic_preflight(events: list[EventRow]) -> None:
     for name, scenarios in pair_scenarios.items():
         subset = [e for e in events if e.baseline == "B4" and e.scenario in scenarios and e.decision in {"allow", "throttle"}]
         n_attack = sum(1 for e in subset if e.label == "attack")
-        if n_attack < 30:
-            raise RuntimeError(f"Preflight failed: {name} requires >=30 non-deny attacks for B4; got {n_attack}.")
+        n_benign = sum(1 for e in subset if e.label == "benign")
+        if n_attack < 50 or n_benign < 100:
+            raise RuntimeError(f"Preflight failed: Served-traffic evidence insufficient for {name} (attack={n_attack}, benign={n_benign}).")
 
     bad_risk = [e for e in events if e.baseline == "B4" and e.decision in {"allow", "throttle"} and e.risk < 0.0]
     if bad_risk:

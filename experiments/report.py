@@ -111,7 +111,7 @@ def write_report(rows: list[MetricRow], *, seeds: int, b4_eval: B4RiskEvaluation
 
     sweep_rows = [r for r in rows if r.baseline == "B4" and r.scenario.startswith("S4_mixedload_sweep_x")]
     if sweep_rows:
-        md += ["", "## Mixed-load sweep (label-split)", "", "### Attack panel", "", "| scale | ASR_allow_attack | ASR_non_deny_attack | cost_attack | throttle_attack | p95_attack |", "|---:|---:|---:|---:|---:|---:|"]
+        md += ["", "## Mixed-load contention sweep", "", "Label-split metrics are reported under shared queue/budget pressure so benign and attack traffic contend for the same limiter state.", "", "### Attack panel", "", "| scale | ASR_allow_attack | ASR_non_deny_attack | cost_attack | throttle_attack | p95_attack |", "|---:|---:|---:|---:|---:|---:|"]
         for r in sorted(sweep_rows, key=lambda x: x.scenario, reverse=True):
             sc = r.scenario.split("_x")[-1]
             md.append(f"| {sc} | {r.asr_allow_attack:.4f} | {r.asr_non_deny_attack:.4f} | {r.cost_attack:.2f} | {r.throttle_attack:.4f} | {r.p95_attack:.3f} |")

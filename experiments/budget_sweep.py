@@ -15,11 +15,13 @@ from fastapi.testclient import TestClient
 
 SCALES = [1.00, 0.70, 0.50, 0.35, 0.25]
 SWEEP_COUNTS = {
-    "S3_replay_nearmiss_hard": 44,
-    "S3_replay_blended_hard": 44,
-    "S1_restricted_issuance_hard": 44,
-    "S2_delegated_misuse_hard": 44,
-    "S3_benign_control_hard": 140,
+    "S1_restricted_issuance_hard": 80,
+    "S2_delegated_misuse_hard": 80,
+    "S3_replay_nearmiss_hard": 70,
+    "S3_replay_blended_hard": 70,
+    "S1_benign_control_hard": 90,
+    "S2_benign_control_hard": 90,
+    "S3_benign_control_hard": 120,
 }
 
 
@@ -44,12 +46,20 @@ def _run_mixedload_for_scale(*, out_dir: Path, seed: int, scale: float) -> list[
         req_by_scenario = {s: scenario_requests(s, n, seed=seed, baseline="B4") for s, n in SWEEP_COUNTS.items()}
         max_n = max(len(v) for v in req_by_scenario.values())
 
+        ordered_scenarios = sorted(req_by_scenario)
         for i in range(max_n):
-            for scenario, reqs in req_by_scenario.items():
+            for scenario in ordered_scenarios:
+                reqs = req_by_scenario[scenario]
                 if i >= len(reqs):
                     continue
                 req = dict(reqs[i])
                 req["scenario"] = scenario
+                if scenario.endswith("benign_control_hard"):
+                    req["max_tokens"] = int(req.get("max_tokens", 12)) + 8
+                elif scenario in {"S1_restricted_issuance_hard", "S2_delegated_misuse_hard"}:
+                    req["max_tokens"] = int(req.get("max_tokens", 12)) + 10
+                else:
+                    req["max_tokens"] = int(req.get("max_tokens", 12)) + 6
                 headers = {
                     "Authorization": f"Bearer {owner_token}",
                     "DPoP": _proof(LEGIT_PRIVATE, owner_token, f"{scenario}-{i}", owner_jkt),
@@ -94,9 +104,9 @@ def run_b4_budget_sweep(*, out_dir: Path, seed: int) -> list[EventRow]:
 
     sweep_events: list[EventRow] = []
     for scale in SCALES:
-        os.environ["B4_RPM_LIMIT"] = str(_scaled(150, scale))
-        os.environ["B4_TPM_LIMIT"] = str(_scaled(2100, scale))
-        os.environ["B4_MAXTOK_SCALE"] = "1.00"
+        os.environ["B4_RPM_LIMIT"] = str(_scaled(120, scale))
+        os.environ["B4_TPM_LIMIT"] = str(_scaled(1700, scale))
+        os.environ["B4_MAXTOK_SCALE"] = "1.10"
         sweep_events.extend(_run_mixedload_for_scale(out_dir=out_dir, seed=seed, scale=scale))
 
     for k, v in prior.items():
