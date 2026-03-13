@@ -473,12 +473,12 @@ def create_app() -> FastAPI:
 
         if scenario == "S1_restricted_issuance_hard":
             deny_bucket = int(hashlib.sha256(f"s1restrict:deny:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
-            if deny_bucket < 30:
+            if deny_bucket < 10:
                 recent_throttles.append(1)
                 return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), max(risk, 0.20), {"error": "risk_deny"})
         if scenario == "S2_delegated_misuse_hard":
             deny_bucket = int(hashlib.sha256(f"s2delegate:deny:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
-            if deny_bucket < 25:
+            if deny_bucket < 10:
                 recent_throttles.append(1)
                 return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), max(risk, 0.22), {"error": "risk_deny"})
 

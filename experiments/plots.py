@@ -99,5 +99,9 @@ def generate_plots(rows: list[MetricRow], *, b4_eval: B4RiskEvaluation, b2_serve
         out.append(_line_svg("B4 Mixed-load Sweep (attack): Cost vs ASR_non_deny_attack", {"attack": [(r.cost_attack, r.asr_non_deny_attack) for r in sweep]}, "Cost attack", "ASR_non_deny_attack", PLOTS_DIR / "b4_budget_cost_vs_asr_non_deny.svg", labels=[(r.cost_attack, r.asr_non_deny_attack, r.scenario.split("_x")[-1]) for r in sweep]))
         out.append(_line_svg("B4 Mixed-load Sweep (benign): SR_benign vs scale", {"SR_benign": [(float(r.scenario.split("_x")[-1]), r.sr_benign) for r in sweep]}, "Scale", "SR_benign", PLOTS_DIR / "b4_budget_benign_sr_vs_scale.svg"))
         out.append(_line_svg("B4 Mixed-load Sweep (benign): throttle_benign vs scale", {"throttle_benign": [(float(r.scenario.split("_x")[-1]), r.throttle_benign) for r in sweep]}, "Scale", "throttle_benign", PLOTS_DIR / "b4_budget_benign_throttle_vs_scale.svg"))
+        out.append(_line_svg("B4 Mixed-load Contention Tradeoff (annotated)", {
+            "attack ASR_non_deny": [(r.cost_attack, r.asr_non_deny_attack) for r in sweep],
+            "benign SR": [(r.cost_attack, r.sr_benign) for r in sweep],
+        }, "Cost attack", "Metric", PLOTS_DIR / "b4_budget_tradeoff_annotated.svg", labels=[(r.cost_attack, r.asr_non_deny_attack, f"x{r.scenario.split('_x')[-1]}") for r in sweep]))
 
     return out
