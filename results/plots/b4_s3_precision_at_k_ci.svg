@@ -5,14 +5,14 @@
 <circle cx="50.0" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
 <circle cx="106.8" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
 <circle cx="163.7" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
-<circle cx="305.8" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
+<circle cx="305.8" cy="119.8" r="2" fill="#1f77b4" opacity="0.2"/>
 <circle cx="590.0" cy="370.0" r="2" fill="#1f77b4" opacity="0.2"/>
 <circle cx="50.0" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
 <circle cx="106.8" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
 <circle cx="163.7" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
 <circle cx="305.8" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
-<circle cx="590.0" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
-<polyline fill="none" stroke="#1f77b4" stroke-width="2" points="50.0,50.0 106.8,50.0 163.7,50.0 305.8,50.0 590.0,74.6"/>
+<circle cx="590.0" cy="212.9" r="2" fill="#1f77b4" opacity="0.2"/>
+<polyline fill="none" stroke="#1f77b4" stroke-width="2" points="50.0,50.0 106.8,50.0 163.7,50.0 305.8,50.0 590.0,294.4"/>
 <line x1="450" y1="35" x2="470" y2="35" stroke="#1f77b4" stroke-width="2"/>
 <text x="474" y="39" font-size="11">P@K</text>
 </svg>

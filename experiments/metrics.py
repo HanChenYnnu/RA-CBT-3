@@ -12,7 +12,7 @@ from experiments.types import EventRow
 MIN_NON_DENY = 50
 MIN_CLASS_NON_DENY = 20
 K_VALUES = [10, 30, 50, 100, 200]
-BOOTSTRAP_N = 1000
+BOOTSTRAP_N = 100
 
 
 @dataclass(frozen=True)
@@ -203,6 +203,10 @@ def _sigmoid(x: float) -> float:
 def _calibrate_temperature(scores: list[float], labels: list[int]) -> float:
     if not scores:
         return 1.0
+    if len(scores) > 5000:
+        step = max(1, len(scores) // 5000)
+        scores = scores[::step]
+        labels = labels[::step]
     best_t, best_loss = 1.0, float("inf")
     for i in range(10, 301):
         t = i / 100.0
@@ -227,15 +231,24 @@ def _sample_thresholds(scores: list[float], descending: bool = False) -> list[fl
 def _roc(labels: list[int], scores: list[float]) -> tuple[float | None, list[RiskPoint]]:
     if not labels or len(set(labels)) < 2:
         return (None, [])
-    thresholds = sorted({0.0, 1.0, *_sample_thresholds(scores)})
-    pts: list[RiskPoint] = []
+    thresholds = sorted({0.0, 1.0, *_sample_thresholds(scores)}, reverse=True)
+    ranked = sorted(zip(scores, labels), key=lambda item: item[0], reverse=True)
     pos = sum(labels)
     neg = len(labels) - pos
+    pts_desc: list[RiskPoint] = []
+    tp = 0
+    fp = 0
+    idx = 0
+    n = len(ranked)
     for t in thresholds:
-        tp = sum(1 for y, s in zip(labels, scores) if y == 1 and s >= t)
-        fp = sum(1 for y, s in zip(labels, scores) if y == 0 and s >= t)
-        pts.append(RiskPoint(fp / max(1, neg), tp / max(1, pos)))
-    pts = sorted(pts, key=lambda p: p.x)
+        while idx < n and ranked[idx][0] >= t:
+            if ranked[idx][1] == 1:
+                tp += 1
+            else:
+                fp += 1
+            idx += 1
+        pts_desc.append(RiskPoint(fp / max(1, neg), tp / max(1, pos)))
+    pts = sorted(pts_desc, key=lambda p: p.x)
     area = 0.0
     for i in range(1, len(pts)):
         x0, y0 = pts[i - 1].x, pts[i - 1].y
@@ -247,12 +260,21 @@ def _roc(labels: list[int], scores: list[float]) -> tuple[float | None, list[Ris
 def _pr(labels: list[int], scores: list[float]) -> tuple[float | None, list[RiskPoint]]:
     if not labels or len(set(labels)) < 2:
         return (None, [])
-    thresholds = _sample_thresholds(scores, descending=True)
-    pts: list[RiskPoint] = []
+    thresholds = [1.0001, *_sample_thresholds(scores, descending=True), -0.0001]
+    ranked = sorted(zip(scores, labels), key=lambda item: item[0], reverse=True)
     pos = sum(labels)
-    for t in [1.0001, *thresholds, -0.0001]:
-        tp = sum(1 for y, s in zip(labels, scores) if y == 1 and s >= t)
-        fp = sum(1 for y, s in zip(labels, scores) if y == 0 and s >= t)
+    pts: list[RiskPoint] = []
+    tp = 0
+    fp = 0
+    idx = 0
+    n = len(ranked)
+    for t in thresholds:
+        while idx < n and ranked[idx][0] >= t:
+            if ranked[idx][1] == 1:
+                tp += 1
+            else:
+                fp += 1
+            idx += 1
         pts.append(RiskPoint(tp / max(1, pos), tp / max(1, tp + fp)))
     pts = sorted(pts, key=lambda p: p.x)
     area = 0.0

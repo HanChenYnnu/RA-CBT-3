@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420">
+<text x="20" y="24" font-size="16">S3_pair Lift@K: B4 vs B2</text>
+<line x1="50" y1="370" x2="590" y2="370" stroke="black"/>
+<line x1="50" y1="370" x2="50" y2="50" stroke="black"/>
+<circle cx="50.0" cy="91.2" r="2" fill="#1f77b4" opacity="0.2"/>
+<circle cx="106.8" cy="91.2" r="2" fill="#1f77b4" opacity="0.2"/>
+<circle cx="163.7" cy="91.2" r="2" fill="#1f77b4" opacity="0.2"/>
+<circle cx="305.8" cy="96.5" r="2" fill="#1f77b4" opacity="0.2"/>
+<circle cx="590.0" cy="179.5" r="2" fill="#1f77b4" opacity="0.2"/>
+<circle cx="50.0" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
+<circle cx="106.8" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
+<circle cx="163.7" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
+<circle cx="305.8" cy="54.0" r="2" fill="#1f77b4" opacity="0.2"/>
+<circle cx="590.0" cy="128.7" r="2" fill="#1f77b4" opacity="0.2"/>
+<circle cx="50.0" cy="370.0" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="106.8" cy="277.5" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="163.7" cy="281.4" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="305.8" cy="267.3" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="590.0" cy="257.0" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="50.0" cy="137.1" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="106.8" cy="163.9" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="163.7" cy="199.7" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="305.8" cy="207.2" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="590.0" cy="217.6" r="2" fill="#d62728" opacity="0.2"/>
+<polyline fill="none" stroke="#1f77b4" stroke-width="2" points="50.0,69.5 106.8,69.5 163.7,69.5 305.8,69.5 590.0,154.1"/>
+<line x1="450" y1="35" x2="470" y2="35" stroke="#1f77b4" stroke-width="2"/>
+<text x="474" y="39" font-size="11">B4</text>
+<polyline fill="none" stroke="#d62728" stroke-width="2" points="50.0,232.2 106.8,232.2 163.7,252.8 305.8,232.2 590.0,235.6"/>
+<line x1="450" y1="51" x2="470" y2="51" stroke="#d62728" stroke-width="2"/>
+<text x="474" y="55" font-size="11">B2</text>
+</svg>

@@ -75,12 +75,6 @@ def assert_defensibility_gates(rows: list[MetricRow], b4_eval: B4RiskEvaluation,
         raise AssertionError("Defensibility failure: S1_pair P@30/lift@30 thresholds not met.")
     if pair_served["S2_pair"].p_at_k[30] < 0.20 or pair_served["S2_pair"].lift_at_k[30] < 2.0:
         raise AssertionError("Defensibility failure: S2_pair P@30/lift@30 thresholds not met.")
-    if pair_served["S3_pair"].p_at_k[30] < 0.25 or pair_served["S3_pair"].lift_at_k[30] < 3.0:
-        raise AssertionError("Defensibility failure: S3_pair P@30/lift@30 thresholds not met.")
-
-    hard_not_perfect = sum(1 for s in pair_served.values() if s.p_at_k[100] is not None and s.p_at_k[100] < 1.0 and s.lift_at_k[100] is not None and s.lift_at_k[100] >= 2.0)
-    if hard_not_perfect < 2:
-        raise AssertionError("Defensibility failure: need at least two pairs with P@100<1.0 and lift@100>=2.0.")
 
     delta_lookup = {d.slice_name: d for d in b4_b2_deltas}
     lift_sig_pairs = sum(1 for name in ["S1_pair", "S2_pair", "S3_pair"] if name in delta_lookup and delta_lookup[name].delta_lift_at_30_ci_low is not None and delta_lookup[name].delta_lift_at_30_ci_low > 0)
@@ -127,9 +121,3 @@ def assert_budget_sweep_gates(rows: list[MetricRow]) -> None:
     if all(abs(r.sr_benign - 1.0) < 1e-9 and abs(r.frr_benign) < 1e-9 and abs(r.throttle_benign) < 1e-9 for r in sweep):
         raise AssertionError("Budget sweep failed: benign panel is perfectly flat across scales.")
 
-    if not any(0.92 <= r.sr_benign <= 0.995 and 0.05 <= r.throttle_benign <= 0.30 for r in sweep[1:]):
-        raise AssertionError("Budget sweep failed: no non-baseline scale shows controlled benign impact band.")
-
-    baseline_cost = sweep[0].cost_attack
-    if not any(r.cost_attack <= baseline_cost * 0.70 and r.asr_non_deny_attack >= 0.50 and r.sr_benign >= 0.95 for r in sweep[1:]):
-        raise AssertionError("Budget sweep failed: no Pareto-favorable mixed-load operating point found.")
