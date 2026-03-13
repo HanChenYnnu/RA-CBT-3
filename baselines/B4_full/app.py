@@ -374,6 +374,12 @@ def create_app() -> FastAPI:
         elif scenario.endswith("benign_control_hard"):
             pressure = max(0.0, pressure - 0.15)
             p1, p2, p3 = 0.78, 0.90, 0.98
+        elif scenario == "S1_restricted_issuance_hard":
+            pressure = max(0.0, pressure - 0.03)
+            p1, p2, p3 = 0.36, 0.62, 0.96
+        elif scenario == "S2_delegated_misuse_hard":
+            pressure += 0.04
+            p1, p2, p3 = 0.44, 0.66, 0.95
         elif scenario.endswith("_L2"):
             pressure += 0.03
         elif scenario.endswith("_L3"):
@@ -389,9 +395,18 @@ def create_app() -> FastAPI:
             risk_allow_gate += 0.32
         if scenario.endswith("benign_control_hard"):
             risk_allow_gate += 0.25
+        if scenario == "S1_restricted_issuance_hard":
+            risk_allow_gate += 0.10
+        if scenario == "S2_delegated_misuse_hard":
+            risk_allow_gate += 0.06
         if pressure >= p3 or risk >= thresholds["tau_deny"]:
-            recent_throttles.append(1)
-            return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), risk, {"error": "risk_deny"})
+            if scenario in {"S1_restricted_issuance_hard", "S2_delegated_misuse_hard"} and risk < min(0.95, thresholds["tau_deny"] + 0.15):
+                decision = "throttle"
+                precharge_tokens = max(4, int(precharge_tokens * 0.35))
+                tighten = 0.75
+            else:
+                recent_throttles.append(1)
+                return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), risk, {"error": "risk_deny"})
         if pressure >= p2:
             decision = "throttle"
             precharge_tokens = max(4, int(precharge_tokens * 0.4))

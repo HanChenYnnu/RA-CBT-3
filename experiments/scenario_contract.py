@@ -20,7 +20,9 @@ class ScenarioCapabilities:
 
 PAIRED_CONTROLS = {
     "S1_key_leak_hard": "S1_benign_control_hard",
+    "S1_restricted_issuance_hard": "S1_benign_control_hard",
     "S2_token_leak_hard": "S2_benign_control_hard",
+    "S2_delegated_misuse_hard": "S2_benign_control_hard",
     "S3_replay_hard": "S3_benign_control_hard",
     "S3_replay_nearmiss_hard": "S3_benign_control_hard",
 }
@@ -30,9 +32,11 @@ SCENARIO_CAPABILITIES: dict[str, ScenarioCapabilities] = {
     "S1_key_leak": ScenarioCapabilities(True, True, True, True, "none", tuple(), "easy", "attack", None),
     "S1_key_leak_hard": ScenarioCapabilities(True, True, True, True, "none", tuple(), "hard", "attack", "S1_benign_control_hard"),
     "S1_benign_control_hard": ScenarioCapabilities(True, True, True, True, "none", tuple(), "hard", "benign", None),
+    "S1_restricted_issuance_hard": ScenarioCapabilities(True, True, True, True, "none", tuple(), "hard", "attack", "S1_benign_control_hard"),
     "S2_token_leak": ScenarioCapabilities(False, True, False, False, "none", tuple(), "easy", "attack", None),
     "S2_token_leak_hard": ScenarioCapabilities(False, True, False, False, "none", tuple(), "hard", "attack", "S2_benign_control_hard"),
     "S2_benign_control_hard": ScenarioCapabilities(True, True, True, True, "none", tuple(), "hard", "benign", None),
+    "S2_delegated_misuse_hard": ScenarioCapabilities(True, True, True, True, "none", tuple(), "hard", "attack", "S2_benign_control_hard"),
     "S2a_token_leak_missing_dpop": ScenarioCapabilities(False, True, False, False, "none", tuple(), "easy", "attack", None),
     "S2b_token_leak_wrong_key_dpop": ScenarioCapabilities(False, True, False, False, "none", tuple(), "easy", "attack", None),
     "S3_replay": ScenarioCapabilities(False, True, True, False, "exact_replay", ("jti", "ath", "signature"), "easy", "attack", None),

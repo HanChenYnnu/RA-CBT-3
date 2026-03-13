@@ -301,8 +301,8 @@ def _seed_metric(bucket: list[EventRow]) -> tuple[float, float, float, float, fl
 
 def _family_rows() -> dict[str, list[str]]:
     return {
-        "S1_pair": ["S1_key_leak_hard", "S1_benign_control_hard"],
-        "S2_pair": ["S2_token_leak_hard", "S2_benign_control_hard"],
+        "S1_pair": ["S1_key_leak_hard", "S1_restricted_issuance_hard", "S1_benign_control_hard"],
+        "S2_pair": ["S2_token_leak_hard", "S2_delegated_misuse_hard", "S2_benign_control_hard"],
         "S3_pair": ["S3_replay_hard", "S3_replay_nearmiss_hard", "S3_benign_control_hard"],
     }
 
@@ -561,17 +561,17 @@ def compute_metrics(events: list[EventRow], b4_eval: B4RiskEvaluation | None = N
         is_b4 = baseline == "B4" and b4_eval is not None
 
         served_name = ""
-        if scenario in {"S1_key_leak_hard", "S1_benign_control_hard"}:
+        if scenario in {"S1_key_leak_hard", "S1_restricted_issuance_hard", "S1_benign_control_hard"}:
             served_name = "S1_pair"
-        elif scenario in {"S2_token_leak_hard", "S2_benign_control_hard"}:
+        elif scenario in {"S2_token_leak_hard", "S2_delegated_misuse_hard", "S2_benign_control_hard"}:
             served_name = "S2_pair"
         elif scenario in {"S3_replay_hard", "S3_replay_nearmiss_hard", "S3_benign_control_hard"}:
             served_name = "S3_pair"
-        elif scenario.startswith("S4_budget_sweep_x"):
+        elif scenario.startswith("S4_mixedload_sweep_x"):
             served_name = "overall"
         served = served_lookup.get(served_name) if is_b4 else None
 
-        split_vals = [_sweep_split(bucket) for bucket in by_seed.values()] if scenario.startswith("S4_budget_sweep_x") else []
+        split_vals = [_sweep_split(bucket) for bucket in by_seed.values()] if scenario.startswith("S4_mixedload_sweep_x") else []
         s = list(zip(*split_vals)) if split_vals else []
 
         def _sv(i: int) -> float:

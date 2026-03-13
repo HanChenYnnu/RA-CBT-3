@@ -20,8 +20,8 @@ from experiments.scenarios import SCENARIOS
 
 
 LOSO_GROUPS = {
-    "S1_pair": ["S1_key_leak_hard", "S1_benign_control_hard"],
-    "S2_pair": ["S2_token_leak_hard", "S2_benign_control_hard"],
+    "S1_pair": ["S1_key_leak_hard", "S1_restricted_issuance_hard", "S1_benign_control_hard"],
+    "S2_pair": ["S2_token_leak_hard", "S2_delegated_misuse_hard", "S2_benign_control_hard"],
     "S3_pair": ["S3_replay_hard", "S3_replay_nearmiss_hard", "S3_benign_control_hard"],
 }
 

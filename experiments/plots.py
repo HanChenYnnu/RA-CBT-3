@@ -72,10 +72,11 @@ def generate_plots(rows: list[MetricRow], *, b4_eval: B4RiskEvaluation) -> list[
         out.append(_line_svg("B4 S3_pair Precision@K (Bootstrap CI)", {"P@K": [(float(k), float(s3.p_at_k[k])) for k in ks]}, "K", "Precision", PLOTS_DIR / "b4_s3_precision_at_k_ci.svg", bands=[([(float(k), float(s3.p_ci[k][0])) for k in ks if s3.p_ci[k][0] is not None], "#1f77b4"), ([(float(k), float(s3.p_ci[k][1])) for k in ks if s3.p_ci[k][1] is not None], "#1f77b4")]))
         out.append(_line_svg("B4 S3_pair Lift@K (Bootstrap CI)", {"lift@K": [(float(k), float(s3.lift_at_k[k])) for k in ks]}, "K", "Lift", PLOTS_DIR / "b4_s3_lift_at_k_ci.svg", bands=[([(float(k), float(s3.lift_ci[k][0])) for k in ks if s3.lift_ci[k][0] is not None], "#d62728"), ([(float(k), float(s3.lift_ci[k][1])) for k in ks if s3.lift_ci[k][1] is not None], "#d62728")]))
 
-    sweep = sorted([r for r in rows if r.baseline == "B4" and r.scenario.startswith("S4_budget_sweep_x")], key=lambda r: r.scenario, reverse=True)
+    sweep = sorted([r for r in rows if r.baseline == "B4" and r.scenario.startswith("S4_mixedload_sweep_x")], key=lambda r: r.scenario, reverse=True)
     if sweep:
-        out.append(_line_svg("B4 Budget Sweep (attack): Cost vs ASR_allow_attack", {"attack": [(r.cost_attack, r.asr_allow_attack) for r in sweep]}, "Cost attack", "ASR_allow_attack", PLOTS_DIR / "b4_budget_attack_cost_vs_asr_allow.svg", labels=[(r.cost_attack, r.asr_allow_attack, r.scenario.split("_x")[-1]) for r in sweep]))
-        out.append(_line_svg("B4 Budget Sweep (benign): SR_benign vs scale", {"SR_benign": [(float(r.scenario.split("_x")[-1]), r.sr_benign) for r in sweep]}, "Scale", "SR_benign", PLOTS_DIR / "b4_budget_benign_sr_vs_scale.svg"))
-        out.append(_line_svg("B4 Budget Sweep (benign): throttle_benign vs scale", {"throttle_benign": [(float(r.scenario.split("_x")[-1]), r.throttle_benign) for r in sweep]}, "Scale", "throttle_benign", PLOTS_DIR / "b4_budget_benign_throttle_vs_scale.svg"))
+        out.append(_line_svg("B4 Mixed-load Sweep (attack): Cost vs ASR_allow_attack", {"attack": [(r.cost_attack, r.asr_allow_attack) for r in sweep]}, "Cost attack", "ASR_allow_attack", PLOTS_DIR / "b4_budget_attack_cost_vs_asr_allow.svg", labels=[(r.cost_attack, r.asr_allow_attack, r.scenario.split("_x")[-1]) for r in sweep]))
+        out.append(_line_svg("B4 Mixed-load Sweep (attack): Cost vs ASR_non_deny_attack", {"attack": [(r.cost_attack, r.asr_non_deny_attack) for r in sweep]}, "Cost attack", "ASR_non_deny_attack", PLOTS_DIR / "b4_budget_cost_vs_asr_non_deny.svg", labels=[(r.cost_attack, r.asr_non_deny_attack, r.scenario.split("_x")[-1]) for r in sweep]))
+        out.append(_line_svg("B4 Mixed-load Sweep (benign): SR_benign vs scale", {"SR_benign": [(float(r.scenario.split("_x")[-1]), r.sr_benign) for r in sweep]}, "Scale", "SR_benign", PLOTS_DIR / "b4_budget_benign_sr_vs_scale.svg"))
+        out.append(_line_svg("B4 Mixed-load Sweep (benign): throttle_benign vs scale", {"throttle_benign": [(float(r.scenario.split("_x")[-1]), r.throttle_benign) for r in sweep]}, "Scale", "throttle_benign", PLOTS_DIR / "b4_budget_benign_throttle_vs_scale.svg"))
 
     return out
