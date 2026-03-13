@@ -75,37 +75,45 @@ def run_b4_scenario(*, scenario: str, n: int, log_path: Path, seed: int) -> list
         owner_ex = _exchange(client, LEGIT_JWK, owner_ctx, "10.0.0.11")
         owner_token, owner_jkt = str(owner_ex["access_token"]), str(owner_ex["cnf"]["jkt"])
 
-        if scenario in {"S1_key_leak", "S1_key_leak_hard"}:
-            attacker_ctx = _ctx("10.0.0.99", "AS100", "US", "browser/100.9", "fp-1" if scenario == "S1_key_leak_hard" else "atk-fp")
+        if scenario in {"S1_key_leak", "S1_key_leak_hard", "S1_restricted_issuance_hard"}:
+            attacker_ctx = _ctx("10.0.0.99", "AS100", "US", "browser/100.9", "fp-1" if scenario in {"S1_key_leak_hard", "S1_restricted_issuance_hard"} else "atk-fp")
             ex = _exchange(client, ATTACKER_JWK, attacker_ctx, "10.0.0.99")
             token = str(ex.get("access_token", ""))
             jkt = str(ex.get("cnf", {}).get("jkt", ""))
             for idx, req in enumerate(reqs):
                 headers = {"Authorization": f"Bearer {token}", "X-Forwarded-For": "10.0.0.99", "X-CTX": attacker_ctx}
-                if token and ((scenario == "S1_key_leak_hard" and idx % 20 == 0) or scenario == "S1_key_leak"):
+                if token and ((scenario == "S1_key_leak_hard" and idx % 20 == 0) or scenario in {"S1_key_leak", "S1_restricted_issuance_hard"}):
                     headers["DPoP"] = _proof(ATTACKER_PRIVATE, token, f"s1-{idx}", jkt)
                 validate_request_semantics(scenario=scenario, auth_present=bool(token), dpop_present="DPoP" in headers, dpop_valid="DPoP" in headers, exchange_called=True)
                 record_sample(scenario=scenario, baseline="B4", caps=manifest, auth_present=bool(token), dpop_present="DPoP" in headers, dpop_valid="DPoP" in headers, exchange_called=True, replay_key="", asn="AS100", country="US", ua_family="browser", max_tokens=int(req.get("max_tokens", 0)))
                 client.post("/v1/chat/completions", json=req, headers=headers if token else {"Authorization": "Bearer invalid"})
 
-        elif scenario in {"S2_token_leak", "S2_token_leak_hard", "S2a_token_leak_missing_dpop", "S2b_token_leak_wrong_key_dpop"}:
+        elif scenario in {"S2_token_leak", "S2_token_leak_hard", "S2a_token_leak_missing_dpop", "S2b_token_leak_wrong_key_dpop", "S2_delegated_misuse_hard"}:
             for idx, req in enumerate(reqs):
                 headers = {"Authorization": f"Bearer {owner_token}", "X-Forwarded-For": "10.0.0.11", "X-CTX": owner_ctx}
-                if scenario == "S2b_token_leak_wrong_key_dpop" or (scenario == "S2_token_leak" and idx % 2 == 1):
+                dpop_valid = False
+                if scenario == "S2_delegated_misuse_hard":
+                    headers["DPoP"] = _proof(LEGIT_PRIVATE, owner_token, f"s2-delegated-{idx}", owner_jkt)
+                    headers["X-Forwarded-For"] = "10.0.0.13"
+                    headers["X-CTX"] = _ctx("10.0.0.13", "AS100", "US", "browser/100.3", "fp-1")
+                    dpop_valid = True
+                elif scenario == "S2b_token_leak_wrong_key_dpop" or (scenario == "S2_token_leak" and idx % 2 == 1):
                     headers["DPoP"] = _proof(ATTACKER_PRIVATE, owner_token, f"s2-{idx}", "wrong-jkt")
-                validate_request_semantics(scenario=scenario, auth_present=True, dpop_present="DPoP" in headers, dpop_valid=False, exchange_called=False)
-                record_sample(scenario=scenario, baseline="B4", caps=manifest, auth_present=True, dpop_present="DPoP" in headers, dpop_valid=False, exchange_called=False, replay_key="", asn="AS100", country="US", ua_family="browser", max_tokens=int(req.get("max_tokens", 0)))
+                validate_request_semantics(scenario=scenario, auth_present=True, dpop_present="DPoP" in headers, dpop_valid=dpop_valid, exchange_called=False)
+                record_sample(scenario=scenario, baseline="B4", caps=manifest, auth_present=True, dpop_present="DPoP" in headers, dpop_valid=dpop_valid, exchange_called=False, replay_key="", asn="AS100", country="US", ua_family="browser", max_tokens=int(req.get("max_tokens", 0)))
                 client.post("/v1/chat/completions", json=req, headers=headers)
 
-        elif scenario in {"S3_replay", "S3_replay_hard", "S3_replay_nearmiss_hard"}:
+        elif scenario in {"S3_replay", "S3_replay_hard", "S3_replay_nearmiss_hard", "S3_replay_blended_hard"}:
             replay = _proof(LEGIT_PRIVATE, owner_token, "s3-replay", owner_jkt)
             for idx, req in enumerate(reqs):
                 if scenario == "S3_replay_hard":
                     replay = _proof(LEGIT_PRIVATE, owner_token, "s3-replay-hard-fixed", owner_jkt)
                 elif scenario == "S3_replay_nearmiss_hard":
                     replay = _proof(LEGIT_PRIVATE, owner_token, f"s3-replay-nearmiss-{idx % 100}", owner_jkt)
+                elif scenario == "S3_replay_blended_hard":
+                    replay = _proof(LEGIT_PRIVATE, owner_token, f"s3-replay-blended-{idx % 200}", owner_jkt)
                 replay_key = json.loads(replay).get("jti", "")
-                req_ctx = owner_ctx if scenario != "S3_replay_nearmiss_hard" or idx % 3 == 0 else _ctx("10.0.0.77", "AS100", "US", "browser/100.1", "fp-mismatch")
+                req_ctx = owner_ctx if scenario not in {"S3_replay_nearmiss_hard", "S3_replay_blended_hard"} or idx % 3 == 0 else _ctx("10.0.0.77", "AS100", "US", "browser/100.1", "fp-mismatch")
                 req_ip = "10.0.0.11" if req_ctx == owner_ctx else "10.0.0.77"
                 validate_request_semantics(scenario=scenario, auth_present=True, dpop_present=True, dpop_valid=True, exchange_called=False)
                 record_sample(scenario=scenario, baseline="B4", caps=manifest, auth_present=True, dpop_present=True, dpop_valid=True, exchange_called=False, replay_key=replay_key, asn="AS100", country="US", ua_family="browser", max_tokens=int(req.get("max_tokens", 0)))

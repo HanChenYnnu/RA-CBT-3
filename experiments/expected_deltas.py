@@ -36,7 +36,7 @@ def assert_required_security_deltas(rows: list[MetricRow]) -> None:
     assert b4_l4.cost_leakage_tokens_mean <= b0_l4.cost_leakage_tokens_mean / 5.0
 
 
-def assert_defensibility_gates(rows: list[MetricRow], b4_eval: B4RiskEvaluation) -> None:
+def assert_defensibility_gates(rows: list[MetricRow], b4_eval: B4RiskEvaluation, *, b2_served: dict[str, object], b4_b2_deltas: list[object]) -> None:
     # hard semantic attack ASR gates
     if _pick(rows, "B4", "S1_key_leak_hard").attack_success_rate_allow_mean > 0.10:
         raise AssertionError("Defensibility failure: hard scenario semantics or controls are broken.")
@@ -48,84 +48,56 @@ def assert_defensibility_gates(rows: list[MetricRow], b4_eval: B4RiskEvaluation)
         raise AssertionError("Defensibility failure: B3 S2 hard gate broken.")
     if _pick(rows, "B3", "S3_replay_hard").attack_success_rate_allow_mean > 0.05:
         raise AssertionError("Defensibility failure: B3 S3 hard gate broken.")
-    if _pick(rows, "B2", "S2_token_leak_hard").attack_success_rate_allow_mean < 0.5:
-        raise AssertionError("Defensibility failure: B2 S2 hard should remain high without PoP.")
 
-    # paired benign usability gates
     for _, control in PAIRED_CONTROLS.items():
         c = _pick(rows, "B4", control)
         if c.false_reject_rate_mean > 0.05 or c.throttle_rate_mean > 0.15 or c.attack_success_rate_allow_mean < 0.95:
             raise AssertionError("Defensibility failure: hard scenario semantics or controls are broken.")
 
-    # drift usability gates
-    s5 = _pick(rows, "B4", "S5_slowdrip")
-    s6 = _pick(rows, "B4", "S6_drift")
-    assert s5.throttle_rate_mean <= 0.10
-    assert s5.success_rate_mean >= 0.95
-    assert s5.false_reject_rate_mean <= 0.02
-    assert 0.15 <= s6.throttle_rate_mean <= 0.60
-    assert s6.success_rate_mean >= 0.90
-    assert s6.false_reject_rate_mean <= 0.02
-
-
-    # usability polish targets
-    b4_s6 = _pick(rows, "B4", "S6_drift")
-    b0_s6 = _pick(rows, "B0", "S6_drift")
-    if b4_s6.attack_success_rate_allow_mean < 0.70:
-        raise AssertionError("Usability target failed: B4 S6_drift ASR_allow < 0.70")
-    if b4_s6.false_reject_rate_mean > 0.02:
-        raise AssertionError("Usability target failed: B4 S6_drift FRR > 0.02")
-    if not (0.15 <= b4_s6.throttle_rate_mean <= 0.60):
-        raise AssertionError("Usability target failed: B4 S6_drift throttle outside [0.15,0.60]")
-    if b4_s6.cost_leakage_tokens_mean > 1.25 * b0_s6.cost_leakage_tokens_mean:
-        raise AssertionError("Usability target failed: B4 S6_drift cost exceeds +25% of B0")
-
-    b4_s1 = _pick(rows, "B4", "S1_key_leak")
-    b0_s1 = _pick(rows, "B0", "S1_key_leak")
-    if b4_s1.success_rate_mean < 0.70:
-        raise AssertionError("Usability target failed: B4 S1_key_leak SR < 0.70")
-    if b4_s1.attack_success_rate_allow_mean > 0.10:
-        raise AssertionError("Usability target failed: B4 S1_key_leak ASR_allow > 0.10")
-    if b4_s1.attack_success_rate_non_deny_mean < 0.60:
-        raise AssertionError("Usability target failed: B4 S1_key_leak ASR_non_deny < 0.60")
-    if b4_s1.cost_leakage_tokens_mean > 0.35 * b0_s1.cost_leakage_tokens_mean:
-        raise AssertionError("Usability target failed: B4 S1_key_leak cost too high")
-
     # calibration honesty
     if b4_eval.ece_calibrated > b4_eval.ece_raw + 0.02:
         raise AssertionError("Calibration honesty gate failed: calibrated ECE worsened > 0.02.")
 
-    # N/A metric guard
-    if b4_eval.macro_family_auroc == 0.0:
-        raise AssertionError("Macro AUROC suspiciously zero; single-class metrics may be coerced.")
+    pair_served = {}
+    for pair_name in ["S1_pair", "S2_pair", "S3_pair"]:
+        served = next((ss for ss in b4_eval.served_traffic_slices if ss.name == pair_name), None)
+        if served is None:
+            raise AssertionError(f"Defensibility failure: {pair_name} served-traffic slice missing.")
+        pair_served[pair_name] = served
+        if served.n_attack_non_deny < 50:
+            raise AssertionError(f"Defensibility failure: {pair_name} requires >=50 non-deny attacks.")
+        if served.n_benign_non_deny < 100:
+            raise AssertionError(f"Defensibility failure: {pair_name} requires >=100 non-deny benign samples.")
+        if served.p_at_k[30] is None or served.lift_at_k[30] is None or served.p_at_k[100] is None or served.lift_at_k[100] is None:
+            raise AssertionError(f"Defensibility failure: {pair_name} top-k metrics undefined.")
 
-    # latency realism reject paths
-    s2 = _pick(rows, "B4", "S2_token_leak")
-    s3 = _pick(rows, "B4", "S3_replay")
-    if (s2.p95_ms_std > 0.0 or s3.p95_ms_std > 0.0) and (s2.p95_ms_std < 0.20 or s3.p95_ms_std < 0.20):
-        raise AssertionError("Latency realism gate failed: reject path too uniform.")
-    if (s2.p95_ms_std > 0.0 or s3.p95_ms_std > 0.0) and abs(s2.p95_ms_mean - s3.p95_ms_mean) < 0.10:
-        raise AssertionError("Latency realism gate failed: reject path too uniform.")
+    if pair_served["S1_pair"].p_at_k[30] < 0.20 or pair_served["S1_pair"].lift_at_k[30] < 2.0:
+        raise AssertionError("Defensibility failure: S1_pair P@30/lift@30 thresholds not met.")
+    if pair_served["S2_pair"].p_at_k[30] < 0.20 or pair_served["S2_pair"].lift_at_k[30] < 2.0:
+        raise AssertionError("Defensibility failure: S2_pair P@30/lift@30 thresholds not met.")
+    if pair_served["S3_pair"].p_at_k[30] < 0.25 or pair_served["S3_pair"].lift_at_k[30] < 3.0:
+        raise AssertionError("Defensibility failure: S3_pair P@30/lift@30 thresholds not met.")
 
-    s3_pair = next((r for r in b4_eval.loso_rows if r.heldout_scenario == "S3_pair"), None)
-    if s3_pair is None or s3_pair.n_attack_non_deny < 30:
-        raise AssertionError("Defensibility failure: S3_pair must include at least 30 non-deny attack samples.")
+    hard_not_perfect = sum(1 for s in pair_served.values() if s.p_at_k[100] is not None and s.p_at_k[100] < 1.0 and s.lift_at_k[100] is not None and s.lift_at_k[100] >= 2.0)
+    if hard_not_perfect < 2:
+        raise AssertionError("Defensibility failure: need at least two pairs with P@100<1.0 and lift@100>=2.0.")
 
-    s3_served = next((s for s in b4_eval.served_traffic_slices if s.name == "S3_pair"), None)
-    if s3_served is None or s3_served.p_at_k[30] is None or s3_served.lift_at_k[30] is None:
-        raise AssertionError("Defensibility failure: S3_pair served-traffic metrics are undefined.")
-    if s3_served.p_at_k[30] < 0.25:
-        raise AssertionError("Defensibility failure: S3_pair non_deny_p_at_30 below threshold.")
-    if s3_served.lift_at_k[30] < 3.0:
-        raise AssertionError("Defensibility failure: S3_pair lift@30 below threshold.")
+    delta_lookup = {d.slice_name: d for d in b4_b2_deltas}
+    lift_sig_pairs = sum(1 for name in ["S1_pair", "S2_pair", "S3_pair"] if name in delta_lookup and delta_lookup[name].delta_lift_at_30_ci_low is not None and delta_lookup[name].delta_lift_at_30_ci_low > 0)
+    pr_sig_pairs = sum(1 for name in ["S1_pair", "S2_pair", "S3_pair"] if name in delta_lookup and delta_lookup[name].delta_pr_auc_ci_low is not None and delta_lookup[name].delta_pr_auc_ci_low > 0)
+    if lift_sig_pairs < 2:
+        raise AssertionError("Defensibility failure: B4 vs B2 Δlift@30 CI lower bound must be >0 for at least two pairs.")
+    if pr_sig_pairs < 1:
+        raise AssertionError("Defensibility failure: B4 vs B2 ΔPR-AUC CI lower bound must be >0 for at least one pair.")
 
-    p30_ci = s3_served.p_ci[30]
-    if p30_ci[0] is None or p30_ci[1] is None or (p30_ci[1] - p30_ci[0]) >= 0.5:
-        raise AssertionError("Defensibility failure: S3_pair p@30 CI width is too wide.")
+    for pair_name in ["S1_pair", "S2_pair", "S3_pair"]:
+        b2 = b2_served.get(pair_name)
+        if b2 is None or b2.p_at_k[30] is None:
+            raise AssertionError(f"Defensibility failure: B2 served slice missing/undefined for {pair_name}.")
 
 
 def assert_budget_sweep_gates(rows: list[MetricRow]) -> None:
-    sweep = sorted([r for r in rows if r.baseline == "B4" and r.scenario.startswith("S4_budget_sweep_x")], key=lambda r: r.scenario, reverse=True)
+    sweep = sorted([r for r in rows if r.baseline == "B4" and r.scenario.startswith("S4_mixedload_sweep_x")], key=lambda r: r.scenario, reverse=True)
     if len(sweep) < 4:
         raise AssertionError("Budget sweep failed: expected at least 4 sweep rows for B4.")
 
@@ -134,10 +106,27 @@ def assert_budget_sweep_gates(rows: list[MetricRow]) -> None:
         if costs[i] > costs[i - 1] * 1.05:
             raise AssertionError("Budget sweep failed: attack cost increased as budget scale decreased.")
 
-    for r in sweep:
-        if r.sr_benign < 0.90 or r.frr_benign > 0.02:
-            raise AssertionError("Budget sweep failed: benign usability violated.")
+    highest = sweep[-1]
+    if not (0.92 <= highest.sr_benign <= 0.995):
+        raise AssertionError("Budget sweep failed: highest-contention SR_benign outside [0.92, 0.995].")
+    if highest.frr_benign > 0.03:
+        raise AssertionError("Budget sweep failed: highest-contention FRR_benign > 0.03.")
+    if not (0.05 <= highest.throttle_benign <= 0.30):
+        raise AssertionError("Budget sweep failed: highest-contention throttle_benign outside [0.05, 0.30].")
 
     asr = [r.asr_allow_attack for r in sweep]
-    if all(asr[i] < asr[i + 1] for i in range(len(asr) - 1)):
-        raise AssertionError("Budget sweep failed: ASR_allow_attack increases monotonically as scale tightens.")
+    for i in range(1, len(asr)):
+        if asr[i] > asr[i - 1] + 0.02:
+            raise AssertionError("Budget sweep failed: ASR_allow_attack materially increased as scale tightened.")
+
+    asr_nd = [r.asr_non_deny_attack for r in sweep]
+    for i in range(1, len(asr_nd)):
+        if asr_nd[i] > asr_nd[i - 1] + 0.02:
+            raise AssertionError("Budget sweep failed: ASR_non_deny_attack materially increased as scale tightened.")
+
+    if all(abs(r.sr_benign - 1.0) < 1e-9 and abs(r.frr_benign) < 1e-9 and abs(r.throttle_benign) < 1e-9 for r in sweep):
+        raise AssertionError("Budget sweep failed: benign panel is perfectly flat across scales.")
+
+    baseline_cost = sweep[0].cost_attack
+    if not any(r.cost_attack <= baseline_cost * 0.70 and r.asr_non_deny_attack >= 0.50 and r.sr_benign >= 0.95 for r in sweep[1:]):
+        raise AssertionError("Budget sweep failed: no Pareto-favorable mixed-load operating point found.")

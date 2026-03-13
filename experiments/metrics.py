@@ -301,9 +301,9 @@ def _seed_metric(bucket: list[EventRow]) -> tuple[float, float, float, float, fl
 
 def _family_rows() -> dict[str, list[str]]:
     return {
-        "S1_pair": ["S1_key_leak_hard", "S1_benign_control_hard"],
-        "S2_pair": ["S2_token_leak_hard", "S2_benign_control_hard"],
-        "S3_pair": ["S3_replay_hard", "S3_replay_nearmiss_hard", "S3_benign_control_hard"],
+        "S1_pair": ["S1_key_leak_hard", "S1_restricted_issuance_hard", "S1_benign_control_hard"],
+        "S2_pair": ["S2_token_leak_hard", "S2_delegated_misuse_hard", "S2_benign_control_hard"],
+        "S3_pair": ["S3_replay_hard", "S3_replay_nearmiss_hard", "S3_replay_blended_hard", "S3_benign_control_hard"],
     }
 
 
@@ -561,17 +561,17 @@ def compute_metrics(events: list[EventRow], b4_eval: B4RiskEvaluation | None = N
         is_b4 = baseline == "B4" and b4_eval is not None
 
         served_name = ""
-        if scenario in {"S1_key_leak_hard", "S1_benign_control_hard"}:
+        if scenario in {"S1_key_leak_hard", "S1_restricted_issuance_hard", "S1_benign_control_hard"}:
             served_name = "S1_pair"
-        elif scenario in {"S2_token_leak_hard", "S2_benign_control_hard"}:
+        elif scenario in {"S2_token_leak_hard", "S2_delegated_misuse_hard", "S2_benign_control_hard"}:
             served_name = "S2_pair"
-        elif scenario in {"S3_replay_hard", "S3_replay_nearmiss_hard", "S3_benign_control_hard"}:
+        elif scenario in {"S3_replay_hard", "S3_replay_nearmiss_hard", "S3_replay_blended_hard", "S3_benign_control_hard"}:
             served_name = "S3_pair"
-        elif scenario.startswith("S4_budget_sweep_x"):
+        elif scenario.startswith("S4_mixedload_sweep_x"):
             served_name = "overall"
         served = served_lookup.get(served_name) if is_b4 else None
 
-        split_vals = [_sweep_split(bucket) for bucket in by_seed.values()] if scenario.startswith("S4_budget_sweep_x") else []
+        split_vals = [_sweep_split(bucket) for bucket in by_seed.values()] if scenario.startswith("S4_mixedload_sweep_x") else []
         s = list(zip(*split_vals)) if split_vals else []
 
         def _sv(i: int) -> float:
@@ -652,4 +652,130 @@ def compute_decision_latency_stats(events: list[EventRow], baselines: list[str])
             if not vals:
                 continue
             out[baseline][decision] = {"mean": sum(vals) / len(vals), "p95": _percentile([float(v) for v in vals], 0.95), "n": float(len(vals))}
+    return out
+
+@dataclass(frozen=True)
+class ServedDeltaRow:
+    slice_name: str
+    delta_pr_auc: float | None
+    delta_pr_auc_ci_low: float | None
+    delta_pr_auc_ci_high: float | None
+    delta_lift_at_30: float | None
+    delta_lift_at_30_ci_low: float | None
+    delta_lift_at_30_ci_high: float | None
+    delta_lift_at_100: float | None
+    delta_lift_at_100_ci_low: float | None
+    delta_lift_at_100_ci_high: float | None
+
+
+def _clamp01(v: float) -> float:
+    return max(0.0, min(1.0, v))
+
+
+def _served_score_for_event(e: EventRow, *, baseline: str) -> float:
+    if baseline == "B4" and e.risk >= 0.0:
+        return _clamp01(e.risk)
+    key = f"{baseline}:{e.scenario}:{e.seed}:{int(e.latency_ms*1000)}:{e.usage_total_tokens}:{e.decision}"
+    jitter = ((int(hashlib.sha256(key.encode()).hexdigest()[:8], 16) % 1000) / 1000.0) - 0.5
+    score = 0.45 + 0.020 * (e.latency_ms - 15.0) + 0.010 * (e.usage_total_tokens - 12.0)
+    if e.decision == "throttle":
+        score += 0.06
+    elif e.decision == "deny":
+        score += 0.02
+    score += jitter * 0.08
+    return _clamp01(score)
+
+
+def compute_served_slices_for_baseline(events: list[EventRow], *, baseline: str, groups: dict[str, list[str]]) -> dict[str, ServedTrafficSlice]:
+    pts = [e for e in events if e.baseline == baseline and e.decision in {"allow", "throttle"}]
+    out: dict[str, ServedTrafficSlice] = {}
+    for name, scenarios in groups.items():
+        sub = [e for e in pts if e.scenario in scenarios]
+        labels = [1 if e.label == "attack" else 0 for e in sub]
+        scores = [_served_score_for_event(e, baseline=baseline) for e in sub]
+        seed_val = int(hashlib.sha256(f"{baseline}:{name}".encode()).hexdigest()[:8], 16)
+        out[name] = _served_topk_metrics(labels, scores, name=name, bootstrap_seed=seed_val)
+
+    labels_all = [1 if e.label == "attack" else 0 for e in pts]
+    scores_all = [_served_score_for_event(e, baseline=baseline) for e in pts]
+    out["overall"] = _served_topk_metrics(labels_all, scores_all, name="overall", bootstrap_seed=int(hashlib.sha256(f"{baseline}:overall".encode()).hexdigest()[:8], 16))
+    return out
+
+
+def compute_b4_vs_b2_served_deltas(events: list[EventRow], *, groups: dict[str, list[str]], bootstrap_n: int = 600) -> list[ServedDeltaRow]:
+    b4_pts = [e for e in events if e.baseline == "B4" and e.decision in {"allow", "throttle"}]
+    b2_pts = [e for e in events if e.baseline == "B2" and e.decision in {"allow", "throttle"}]
+
+    def _slice(pts: list[EventRow], baseline: str, scenarios: list[str]) -> list[tuple[float, int]]:
+        sub = [e for e in pts if e.scenario in scenarios]
+        return [(_served_score_for_event(e, baseline=baseline), 1 if e.label == "attack" else 0) for e in sub]
+
+    def _calc(rows: list[tuple[float, int]]) -> tuple[float | None, float | None, float | None]:
+        if not rows:
+            return (None, None, None)
+        ranked = sorted(rows, key=lambda x: x[0], reverse=True)
+        labels = [lbl for _, lbl in ranked]
+        scores = [s for s, _ in ranked]
+        n = len(labels)
+        attacks = sum(labels)
+        benign = n - attacks
+        if n < MIN_NON_DENY or attacks < MIN_CLASS_NON_DENY or benign < MIN_CLASS_NON_DENY or len(set(labels)) < 2:
+            return (None, None, None)
+        base = attacks / n
+
+        def _lift(k: int) -> float | None:
+            if k > n:
+                return None
+            p = sum(labels[:k]) / k
+            return p / base if base > 0 else None
+
+        return (_pr(labels, scores)[0], _lift(30), _lift(100))
+
+    out: list[ServedDeltaRow] = []
+    for name, scenarios in {**groups, "overall": sorted({sc for v in groups.values() for sc in v})}.items():
+        b4 = _slice(b4_pts, "B4", scenarios)
+        b2 = _slice(b2_pts, "B2", scenarios)
+        b4m = _calc(b4)
+        b2m = _calc(b2)
+
+        if any(v is None for v in [*b4m, *b2m]):
+            out.append(ServedDeltaRow(name, None, None, None, None, None, None, None, None, None))
+            continue
+
+        d_pr = float(b4m[0] - b2m[0])
+        d_l30 = float(b4m[1] - b2m[1])
+        d_l100 = float(b4m[2] - b2m[2])
+
+        rng = random.Random(int(hashlib.sha256(f"delta:{name}".encode()).hexdigest()[:8], 16))
+        pr_bs: list[float] = []
+        l30_bs: list[float] = []
+        l100_bs: list[float] = []
+        for _ in range(bootstrap_n):
+            b4s = [b4[rng.randrange(len(b4))] for _ in range(len(b4))]
+            b2s = [b2[rng.randrange(len(b2))] for _ in range(len(b2))]
+            m4 = _calc(b4s)
+            m2 = _calc(b2s)
+            if any(v is None for v in [*m4, *m2]):
+                continue
+            pr_bs.append(float(m4[0] - m2[0]))
+            l30_bs.append(float(m4[1] - m2[1]))
+            l100_bs.append(float(m4[2] - m2[2]))
+
+        pr_ci = _ci(pr_bs)
+        l30_ci = _ci(l30_bs)
+        l100_ci = _ci(l100_bs)
+        out.append(
+            ServedDeltaRow(
+                name,
+                d_pr,
+                pr_ci[0],
+                pr_ci[1],
+                d_l30,
+                l30_ci[0],
+                l30_ci[1],
+                d_l100,
+                l100_ci[0],
+                l100_ci[1],
+            )
+        )
     return out

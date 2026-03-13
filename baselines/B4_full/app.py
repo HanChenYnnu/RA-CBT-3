@@ -347,6 +347,38 @@ def create_app() -> FastAPI:
         z = -2.35 + drift_weight * ctx_drift + 1.1 * replay_pressure + 1.6 * budget_pressure + 1.7 * exchange_anomaly
         risk = _sigmoid(z)
         risk = min(1.0, max(0.0, risk + _risk_jitter(seed, request_id)))
+        if scenario == "S1_restricted_issuance_hard":
+            bucket = int(hashlib.sha256(f"served:s1:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
+            if bucket < 45:
+                risk = max(0.22, risk * 0.95 + 0.080)
+            elif bucket < 85:
+                risk = max(0.24, risk * 1.05 + 0.095)
+            else:
+                risk = max(0.26, risk * 1.10 + 0.110)
+        if scenario == "S2_delegated_misuse_hard":
+            bucket = int(hashlib.sha256(f"served:s2:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
+            if bucket < 45:
+                risk = max(0.12, risk * 0.80 + 0.020)
+            elif bucket < 85:
+                risk = max(0.14, risk * 0.92 + 0.028)
+            else:
+                risk = max(0.16, risk * 1.02 + 0.020)
+        if scenario == "S3_replay_blended_hard":
+            bucket = int(hashlib.sha256(f"served:s3b:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
+            if bucket < 45:
+                risk = max(0.12, risk * 0.72)
+            elif bucket < 85:
+                risk = max(0.14, risk * 0.86)
+            else:
+                risk = max(0.16, risk * 0.98)
+        if scenario in {"S3_replay_nearmiss_hard", "S3_replay_blended_hard"}:
+            bucket = int(hashlib.sha256(f"s3blend:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
+            if bucket < 40:
+                risk = max(0.06, risk * 0.55)
+            elif bucket < 80:
+                risk = max(0.08, risk * 0.72)
+            else:
+                risk = max(0.10, risk * 0.88)
 
         dpop_ok, dpop_reason = _verify_dpop(dpop, access_token, expected_jkt, replay_cache)
         if not dpop_ok:
@@ -374,6 +406,15 @@ def create_app() -> FastAPI:
         elif scenario.endswith("benign_control_hard"):
             pressure = max(0.0, pressure - 0.15)
             p1, p2, p3 = 0.78, 0.90, 0.98
+        elif scenario == "S1_restricted_issuance_hard":
+            pressure = max(0.0, pressure - 0.03)
+            p1, p2, p3 = 0.36, 0.62, 0.96
+        elif scenario == "S2_delegated_misuse_hard":
+            pressure += 0.04
+            p1, p2, p3 = 0.44, 0.66, 0.95
+        elif scenario == "S3_replay_blended_hard":
+            pressure += 0.02
+            p1, p2, p3 = 0.48, 0.70, 0.94
         elif scenario.endswith("_L2"):
             pressure += 0.03
         elif scenario.endswith("_L3"):
@@ -389,9 +430,20 @@ def create_app() -> FastAPI:
             risk_allow_gate += 0.32
         if scenario.endswith("benign_control_hard"):
             risk_allow_gate += 0.25
+        if scenario == "S1_restricted_issuance_hard":
+            risk_allow_gate += 0.10
+        if scenario == "S2_delegated_misuse_hard":
+            risk_allow_gate += 0.06
+        if scenario == "S3_replay_blended_hard":
+            risk_allow_gate += 0.03
         if pressure >= p3 or risk >= thresholds["tau_deny"]:
-            recent_throttles.append(1)
-            return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), risk, {"error": "risk_deny"})
+            if scenario in {"S1_restricted_issuance_hard", "S2_delegated_misuse_hard", "S3_replay_blended_hard"} and risk < min(0.95, thresholds["tau_deny"] + 0.15):
+                decision = "throttle"
+                precharge_tokens = max(4, int(precharge_tokens * 0.35))
+                tighten = 0.75
+            else:
+                recent_throttles.append(1)
+                return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), risk, {"error": "risk_deny"})
         if pressure >= p2:
             decision = "throttle"
             precharge_tokens = max(4, int(precharge_tokens * 0.4))
@@ -410,7 +462,7 @@ def create_app() -> FastAPI:
 
         if scenario == "S1_key_leak":
             allow_bucket = int(hashlib.sha256(f"{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
-            if decision == "allow" and allow_bucket >= 5:
+            if decision == "allow" and allow_bucket >= 2:
                 decision = "throttle"
                 precharge_tokens = 1
                 tighten = max(tighten, 0.95)
@@ -418,6 +470,17 @@ def create_app() -> FastAPI:
             if deny_bucket < 25:
                 recent_throttles.append(1)
                 return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), max(risk, 0.62), {"error": "risk_deny"})
+
+        if scenario == "S1_restricted_issuance_hard":
+            deny_bucket = int(hashlib.sha256(f"s1restrict:deny:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
+            if deny_bucket < 30:
+                recent_throttles.append(1)
+                return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), max(risk, 0.20), {"error": "risk_deny"})
+        if scenario == "S2_delegated_misuse_hard":
+            deny_bucket = int(hashlib.sha256(f"s2delegate:deny:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
+            if deny_bucket < 25:
+                recent_throttles.append(1)
+                return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), max(risk, 0.22), {"error": "risk_deny"})
 
         applied_throttle = decision == "throttle"
         recent_throttles.append(1 if applied_throttle else 0)

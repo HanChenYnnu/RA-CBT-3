@@ -19,3 +19,24 @@ def test_s3_replay_nearmiss_contract() -> None:
     c = get_capabilities("S3_replay_nearmiss_hard")
     assert c.label == "attack"
     assert c.replay_mode == "near_miss_replay"
+
+
+def test_s1_restricted_issuance_contract() -> None:
+    c = get_capabilities("S1_restricted_issuance_hard")
+    assert c.has_user_key is True
+    assert c.can_exchange_token is True
+    assert c.label == "attack"
+
+
+def test_s2_delegated_misuse_contract() -> None:
+    c = get_capabilities("S2_delegated_misuse_hard")
+    assert c.has_access_token is True
+    assert c.has_dpop_private_key is True
+    assert c.can_exchange_token is False
+    assert c.label == "attack"
+
+
+def test_s3_replay_blended_contract() -> None:
+    c = get_capabilities("S3_replay_blended_hard")
+    assert c.label == "attack"
+    assert c.replay_mode == "near_miss_replay"
