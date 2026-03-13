@@ -24,9 +24,9 @@ def _sleep_ms(total_tokens: int, request_id: str) -> float:
     seed = os.environ.get("EXPERIMENT_SEED", "0")
     payload = f"{seed}:{request_id}:{total_tokens}".encode()
     jitter_unit = int(hashlib.sha256(payload).hexdigest()[:6], 16) % 7
-    base_ms = 12.0
-    per_token_ms = 0.08
-    jitter_ms = float(jitter_unit) * 0.9
+    base_ms = 0.2
+    per_token_ms = 0.002
+    jitter_ms = float(jitter_unit) * 0.02
     sleep_ms = base_ms + (per_token_ms * total_tokens) + jitter_ms
     time.sleep(sleep_ms / 1000.0)
     return sleep_ms
