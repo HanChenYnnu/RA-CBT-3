@@ -8,6 +8,7 @@ from pathlib import Path
 
 from baselines.B4_full.harness import _ctx, _exchange, _proof, LEGIT_JWK, LEGIT_PRIVATE
 from baselines.B4_full.app import create_app
+from baselines.B2_bearer_short.app import create_app as create_b2_app
 from experiments.adapters import scenario_label
 from experiments.scenarios import scenario_requests
 from experiments.types import EventRow
@@ -105,10 +106,75 @@ def run_b4_budget_sweep(*, out_dir: Path, seed: int) -> list[EventRow]:
     sweep_events: list[EventRow] = []
     for scale in SCALES:
         os.environ["B4_RPM_LIMIT"] = str(_scaled(120, scale))
-        os.environ["B4_TPM_LIMIT"] = str(_scaled(1700, scale))
+        os.environ["B4_TPM_LIMIT"] = str(_scaled(6200, scale))
         os.environ["B4_MAXTOK_SCALE"] = "1.10"
         sweep_events.extend(_run_mixedload_for_scale(out_dir=out_dir, seed=seed, scale=scale))
 
+    for k, v in prior.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+    return sweep_events
+
+
+def _run_b2_mixedload_for_scale(*, out_dir: Path, seed: int, scale: float) -> list[EventRow]:
+    raw_dir = out_dir / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    sweep_name = f"S4_mixedload_sweep_x{scale:.2f}"
+    log_path = raw_dir / f"seed{seed}_B2_{sweep_name}.jsonl"
+
+    os.environ["LOG_PATH"] = str(log_path)
+    app = create_b2_app()
+    events: list[EventRow] = []
+    with TestClient(app) as client:
+        tok = client.post("/auth/exchange", json={}, headers={"Authorization": "Bearer user-key-demo"}).json()["access_token"]
+        req_by_scenario = {s: scenario_requests(s, n, seed=seed, baseline="B2") for s, n in SWEEP_COUNTS.items()}
+        max_n = max(len(v) for v in req_by_scenario.values())
+        for i in range(max_n):
+            for scenario in sorted(req_by_scenario):
+                reqs = req_by_scenario[scenario]
+                if i >= len(reqs):
+                    continue
+                req = dict(reqs[i])
+                req["scenario"] = scenario
+                req["max_tokens"] = int(req.get("max_tokens", 12)) + 8
+                client.post("/v1/chat/completions", json=req, headers={"Authorization": f"Bearer {tok}"})
+
+    if not log_path.exists():
+        return []
+    for line in log_path.read_text(encoding="utf-8").splitlines():
+        rec = json.loads(line)
+        src = str(rec.get("scenario", ""))
+        label = scenario_label(src)
+        events.append(
+            EventRow(
+                baseline="B2",
+                scenario=sweep_name,
+                status_code=int(rec["status_code"]),
+                reason=str(rec["reason"]),
+                decision=str(rec["decision"]),
+                latency_ms=float(rec["latency_ms"]),
+                usage_total_tokens=int(rec["usage_total_tokens"]),
+                benign=(label == "benign"),
+                risk=float(rec.get("risk", -1.0)),
+                seed=seed,
+                label=label,
+            )
+        )
+    return events
+
+
+def run_b2_budget_sweep(*, out_dir: Path, seed: int) -> list[EventRow]:
+    prior = {
+        "B2_RPM_LIMIT": os.environ.get("B2_RPM_LIMIT"),
+        "B2_TPM_LIMIT": os.environ.get("B2_TPM_LIMIT"),
+    }
+    sweep_events: list[EventRow] = []
+    for scale in SCALES:
+        os.environ["B2_RPM_LIMIT"] = str(_scaled(120, scale))
+        os.environ["B2_TPM_LIMIT"] = str(_scaled(6200, scale))
+        sweep_events.extend(_run_b2_mixedload_for_scale(out_dir=out_dir, seed=seed, scale=scale))
     for k, v in prior.items():
         if v is None:
             os.environ.pop(k, None)

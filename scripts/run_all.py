@@ -10,7 +10,7 @@ from pathlib import Path
 from baselines.B4_full.calibrate_quantiles import calibrate
 from experiments.expected_deltas import assert_budget_sweep_gates, assert_defensibility_gates, assert_required_security_deltas
 from experiments.metrics import compute_b4_risk_evaluation, compute_b4_risk_summary, compute_b4_vs_b2_served_deltas, compute_decision_latency_stats, compute_metrics, compute_served_slices_for_baseline
-from experiments.budget_sweep import run_b4_budget_sweep
+from experiments.budget_sweep import run_b2_budget_sweep, run_b4_budget_sweep
 from experiments.plots import generate_plots
 from experiments.report import write_report
 from experiments.runner import ensure_coverage, planned_baselines, run_b4_calibration_phase, run_selected
@@ -23,6 +23,7 @@ LOSO_GROUPS = {
     "S1_pair": ["S1_key_leak_hard", "S1_restricted_issuance_hard", "S1_benign_control_hard"],
     "S2_pair": ["S2_token_leak_hard", "S2_delegated_misuse_hard", "S2_benign_control_hard"],
     "S3_pair": ["S3_replay_hard", "S3_replay_nearmiss_hard", "S3_replay_blended_hard", "S3_benign_control_hard"],
+    "S4_pair": ["S4_mixedload_sweep_x1.00", "S4_mixedload_sweep_x0.70", "S4_mixedload_sweep_x0.50", "S4_mixedload_sweep_x0.35", "S4_mixedload_sweep_x0.25"],
 }
 
 
@@ -89,6 +90,8 @@ def main() -> None:
                 output_path=Path("baselines/B4_full/calibration.json"),
             )
         events.extend(run_selected(baselines=baselines, scenarios=scenarios, out_dir=out_dir, seed=seed))
+        if "B2" in baselines:
+            events.extend(run_b2_budget_sweep(out_dir=out_dir, seed=seed))
         if "B4" in baselines:
             events.extend(run_b4_budget_sweep(out_dir=out_dir, seed=seed))
 

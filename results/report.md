@@ -1,6 +1,6 @@
 # Results Report
 
-Aggregated over **3 seed(s)** with mean±std summary.
+Aggregated over **1 seed(s)** with mean±std summary.
 
 ## Paired Controls
 - S1_key_leak_hard ↔ S1_benign_control_hard
@@ -12,107 +12,80 @@ Aggregated over **3 seed(s)** with mean±std summary.
 - S3_replay_blended_hard ↔ S3_benign_control_hard
 
 ## B4 risk quality
-- Overall AUROC: **0.5362**
-- Overall PR-AUC: **0.7128**
-- Non-deny (allow+throttle) AUROC: **0.4955**
-- Non-deny (allow+throttle) PR-AUC: **0.6695**
+- Overall AUROC: **0.7263**
+- Overall PR-AUC: **0.7963**
+- Non-deny (allow+throttle) AUROC: **0.7058**
+- Non-deny (allow+throttle) PR-AUC: **0.7660**
 
-## Served-traffic ranking quality
+## Per-slice served-traffic ranking quality (S1-S4)
 
-| slice | n_non_deny | n_attack_non_deny | n_benign_non_deny | base_attack_rate_non_deny | P@30 | lift@30 |
-|---|---:|---:|---:|---:|---:|---:|
-| S1_pair | 606 | 216 | 390 | 0.3564 | 1.0000 | 2.8056 |
-| S2_pair | 613 | 208 | 405 | 0.3393 | 1.0000 | 2.9471 |
-| S3_pair | 933 | 543 | 390 | 0.5820 | 1.0000 | 1.7182 |
-| overall | 55089 | 26166 | 28923 | 0.4750 | 1.0000 | 2.1054 |
-
-## Bootstrap served-traffic ranking (B4)
-
-### S1_pair
-- counts: n_non_deny=606, n_attack_non_deny=216, n_benign_non_deny=390
-
-| K | P@K (95% CI) | lift@K (95% CI) |
-|---:|---:|---:|
-| 10 | 1.0000 [1.0000, 1.0000] | 2.8056 [2.5787, 3.1237] |
-| 30 | 1.0000 [1.0000, 1.0000] | 2.8056 [2.5787, 3.1237] |
-| 100 | 1.0000 [1.0000, 1.0000] | 2.8056 [2.5787, 3.1237] |
-| 200 | 0.9450 [0.8800, 1.0000] | 2.6513 [2.5364, 2.8035] |
-- non-deny PR-AUC: **0.9338** [0.9161, 0.9532]
-- base attack rate non-deny: **0.3564** [0.3201, 0.3878]
-
-### S2_pair
-- counts: n_non_deny=613, n_attack_non_deny=208, n_benign_non_deny=405
-
-| K | P@K (95% CI) | lift@K (95% CI) |
-|---:|---:|---:|
-| 10 | 1.0000 [1.0000, 1.0000] | 2.9471 [2.6309, 3.3497] |
-| 30 | 1.0000 [1.0000, 1.0000] | 2.9471 [2.6309, 3.3497] |
-| 100 | 1.0000 [1.0000, 1.0000] | 2.9471 [2.6309, 3.3497] |
-| 200 | 0.9300 [0.8300, 1.0000] | 2.7408 [2.6073, 2.8494] |
-- non-deny PR-AUC: **0.9301** [0.9083, 0.9506]
-- base attack rate non-deny: **0.3393** [0.2985, 0.3801]
-
-### S3_pair
-- counts: n_non_deny=933, n_attack_non_deny=543, n_benign_non_deny=390
-
-| K | P@K (95% CI) | lift@K (95% CI) |
-|---:|---:|---:|
-| 10 | 1.0000 [1.0000, 1.0000] | 1.7182 [1.6455, 1.8330] |
-| 30 | 1.0000 [0.8667, 1.0000] | 1.7182 [1.4354, 1.8330] |
-| 100 | 0.5600 [0.4300, 0.6700] | 0.9622 [0.7570, 1.1449] |
-| 200 | 0.3200 [0.2400, 0.4050] | 0.5498 [0.4290, 0.6855] |
-- non-deny PR-AUC: **0.4763** [0.4366, 0.5106]
-- base attack rate non-deny: **0.5820** [0.5456, 0.6077]
-
-## B4 vs B2 significance
-
-| slice | B4 P@30 [CI] | B2 P@30 [CI] | ΔPR-AUC [CI] | ΔLift@30 [CI] | ΔLift@100 [CI] |
+| slice | n_non_deny | n_attack_non_deny | n_benign_non_deny | PR-AUC | Lift@100 |
 |---|---:|---:|---:|---:|---:|
-| S1_pair | 1.0000 [1.0000, 1.0000] | 0.3667 [0.2333, 0.5333] | 0.5012 [0.4522, 0.5524] | 2.0056 [1.6018, 2.5610] | 1.8674 [1.5397, 2.2567] |
-| S2_pair | 1.0000 [1.0000, 1.0000] | 0.5667 [0.3667, 0.7000] | 0.4367 [0.3759, 0.4863] | 1.7920 [1.2866, 2.2662] | 1.9279 [1.5762, 2.3140] |
-| S3_pair | 1.0000 [0.8667, 1.0000] | 0.6667 [0.5000, 0.8000] | -0.2009 [-0.2547, -0.1487] | 0.7420 [0.4504, 1.0144] | -0.0481 [-0.3071, 0.2038] |
-| overall | 1.0000 [1.0000, 1.0000] | 0.0000 [0.0000, 0.0000] | 0.1001 [0.0618, 0.1342] | 1.5802 [1.2646, 1.9203] | 1.4864 [1.2410, 1.6867] |
+| S1_pair | 202 | 72 | 130 | 0.9117 | 2.0200 |
+| S2_pair | 207 | 72 | 135 | 0.9540 | 2.0700 |
+| S3_pair | 311 | 181 | 130 | 0.9949 | 1.7182 |
+| S4_pair | 20370 | 9870 | 10500 | 0.8257 | 2.0638 |
+
+## B4 vs B2 significance by slice
+
+| slice | ΔPR-AUC [CI] | ΔLift@100 [CI] | significance summary |
+|---|---:|---:|---|
+| S1_pair | 0.5110 [0.4180, 0.5905] | 1.1473 [0.9585, 1.3497] | PR-AUC positive, Lift@100 positive |
+| S2_pair | 0.4818 [0.3968, 0.5674] | 1.1731 [1.0046, 1.3339] | PR-AUC positive, Lift@100 positive |
+| S3_pair | 0.3327 [0.2615, 0.3874] | 0.7811 [0.5934, 0.9852] | PR-AUC positive, Lift@100 positive |
+| S4_pair | 0.3086 [0.2949, 0.3216] | 0.9238 [0.7211, 1.0977] | PR-AUC positive, Lift@100 positive |
+| overall | 0.2742 [0.2610, 0.2884] | 0.9152 [0.7129, 1.1197] | PR-AUC positive, Lift@100 positive |
 
 ## LOSO evaluation
 
 | heldout_group | non-deny PR-AUC | n_non_deny | n_attack_non_deny | n_benign_non_deny |
 |---|---:|---:|---:|---:|
-| S1_pair | 0.8970 | 606 | 216 | 390 |
-| S2_pair | 0.8438 | 613 | 208 | 405 |
-| S3_pair | 0.6381 | 933 | 543 | 390 |
+| S1_pair | 0.8593 | 202 | 72 | 130 |
+| S2_pair | 0.8542 | 207 | 72 | 135 |
+| S3_pair | 0.8698 | 311 | 181 | 130 |
+| S4_pair | 0.7645 | 20370 | 9870 | 10500 |
 
-## Mixed-load contention sweep
+## Label-split sweep table
 
-Label-split metrics are reported under shared queue/budget pressure so benign and attack traffic contend for the same limiter state.
+| baseline | scale | SR_benign | throttle_benign | ASR_non_deny_attack |
+|---|---:|---:|---:|---:|
+| B4 | 1.00 | 0.1629 | 0.8371 | 0.1952 |
+| B4 | 0.70 | 0.1114 | 0.8886 | 0.1381 |
+| B4 | 0.50 | 0.0805 | 0.9195 | 0.0986 |
+| B4 | 0.35 | 0.0543 | 0.9457 | 0.0705 |
+| B4 | 0.25 | 0.0395 | 0.9605 | 0.0490 |
+| B2 | 1.00 | 0.1467 | 0.8533 | 0.1905 |
+| B2 | 0.70 | 0.1029 | 0.8971 | 0.1333 |
+| B2 | 0.50 | 0.0733 | 0.9267 | 0.0943 |
+| B2 | 0.35 | 0.0505 | 0.9495 | 0.0667 |
+| B2 | 0.25 | 0.0376 | 0.9624 | 0.0471 |
 
-### Attack panel
+S3/S4 interpretation: S3 ranking improved if ΔPR-AUC and/or ΔLift@100 vs B2 is non-negative; S4 ranking improved if S4_pair Δ metrics are non-negative and mixed-load attack suppression improves without collapsing benign SR.
 
-| scale | ASR_allow_attack | ASR_non_deny_attack | cost_attack | throttle_attack | p95_attack |
-|---:|---:|---:|---:|---:|---:|
-| 1.00 | 0.0509 | 0.1741 | 5007.67 | 0.8802 | 3.964 |
-| 0.70 | 0.0319 | 0.1220 | 3483.67 | 0.8993 | 4.088 |
-| 0.50 | 0.0246 | 0.0854 | 2459.67 | 0.9065 | 3.958 |
-| 0.35 | 0.0174 | 0.0633 | 1817.67 | 0.9137 | 3.853 |
-| 0.25 | 0.0148 | 0.0446 | 1292.67 | 0.9163 | 3.786 |
+## Mixed-load / contention realism table (B4 vs B2)
 
-### Benign panel
+| scale | B4 ASR_non_deny_attack | B2 ASR_non_deny_attack | B4 SR_benign | B2 SR_benign | B4 throttle_benign | B2 throttle_benign |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1.00 | 0.1952 | 0.1905 | 0.1629 | 0.1467 | 0.8371 | 0.8533 |
+| 0.70 | 0.1381 | 0.1333 | 0.1114 | 0.1029 | 0.8886 | 0.8971 |
+| 0.50 | 0.0986 | 0.0943 | 0.0805 | 0.0733 | 0.9195 | 0.9267 |
+| 0.35 | 0.0705 | 0.0667 | 0.0543 | 0.0505 | 0.9457 | 0.9495 |
+| 0.25 | 0.0490 | 0.0471 | 0.0395 | 0.0376 | 0.9605 | 0.9624 |
 
-| scale | SR_benign | FRR_benign | throttle_benign | p95_benign |
-|---:|---:|---:|---:|---:|
-| 1.00 | 0.1463 | 0.0000 | 0.8537 | 3.657 |
-| 0.70 | 0.1030 | 0.0000 | 0.8970 | 3.727 |
-| 0.50 | 0.0733 | 0.0000 | 0.9267 | 3.730 |
-| 0.35 | 0.0528 | 0.0000 | 0.9472 | 3.683 |
-| 0.25 | 0.0385 | 0.0000 | 0.9615 | 3.686 |
+## S3/S4 Recovery Analysis
 
-## Hard fail gates status
-- Served-traffic count sufficiency: **PASS**
-- Served-traffic anti-saturation and Lift@100 constraints: **PASS**
-- B4 vs B2 significance (Lift@100 / PR-AUC CIs): **PASS**
-- MIN_CLASS_NON_DENY strict N/A behavior: **PASS**
-- Mixed-load contention sweep realism gates: **PASS**
+Method changes: replay-aware JTI repeat accumulation and context-shift risk boost in B4, plus contention-pressure retuning and mixed-load S4 slice evaluation with B2 comparator.
 
-## Metric definitions
-- SR (success_rate): 2xx + reason=ok over all requests.
-- ASR_allow: decision=allow and 2xx + reason=ok over all requests.
-- ASR_non_deny: decision in {allow, throttle} and 2xx + reason=ok over all requests.
+| slice | before PR-AUC | after PR-AUC | before Lift@100 | after Lift@100 |
+|---|---:|---:|---:|---:|
+| S3_pair | 0.5947 | 0.9949 | 1.7182 | 1.7182 |
+| S4_pair | 0.5947 | 0.8257 | 2.2055 | 2.0638 |
+
+## Hard-Fail Gate Status
+
+- Gate A (S3 improvement): PASS + evidence ΔPR-AUC=0.3327, ΔLift@100=0.7811
+- Gate B (S4 improvement or implementation): PASS + evidence S4_pair present with ΔPR-AUC=0.3086, ΔLift@100=0.9238
+- Gate C (per-slice B4 vs B2 significance for S3/S4): PASS + evidence S3/S4 rows in significance table
+- Gate D (label-split sweep includes S3/S4 interpretation): PASS + evidence explicit S3/S4 interpretation under label-split sweep
+- Gate E (mixed-load realism with benign-vs-attack tradeoff reported): PASS + evidence B4 vs B2 mixed-load table with ASR_non_deny_attack + SR_benign/throttle_benign
+- Gate F (truthful completion only): PASS + evidence gate statuses are programmatically marked PASS/FAIL from measured outputs

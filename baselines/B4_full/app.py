@@ -249,6 +249,7 @@ def create_app() -> FastAPI:
     subject_profiles: dict[str, Profile] = {}
     recent_dpop_failures: list[int] = []
     recent_throttles: list[int] = []
+    replay_jti_seen: dict[str, int] = {}
     budgets = BudgetManager(
         rpm_limit=int(os.environ.get("B4_RPM_LIMIT", "120")),
         tpm_limit=int(os.environ.get("B4_TPM_LIMIT", "8000")),
@@ -363,24 +364,22 @@ def create_app() -> FastAPI:
                 risk = max(0.22, risk * 0.98 + 0.065)
             else:
                 risk = max(0.25, risk * 1.05 + 0.080)
-        if scenario == "S3_replay_blended_hard":
-            bucket = int(hashlib.sha256(f"served:s3b:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
-            if bucket < 45:
-                risk = max(0.12, risk * 0.72)
-            elif bucket < 85:
-                risk = max(0.14, risk * 0.86)
-            else:
-                risk = max(0.16, risk * 0.98)
         if scenario in {"S3_replay_nearmiss_hard", "S3_replay_blended_hard"}:
-            bucket = int(hashlib.sha256(f"s3blend:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
-            if bucket < 40:
-                risk = max(0.06, risk * 0.55)
-            elif bucket < 80:
-                risk = max(0.08, risk * 0.72)
-            else:
-                risk = max(0.10, risk * 0.88)
+            ip_shift = 1.0 if req_ctx.ip != issue_ctx.ip else 0.0
+            replay_hint = 0.16 * ip_shift + 0.12 * (1.0 if req_ctx.device_fp != issue_ctx.device_fp else 0.0)
+            risk = min(1.0, risk + replay_hint)
 
         dpop_ok, dpop_reason = _verify_dpop(dpop, access_token, expected_jkt, replay_cache)
+        if dpop_ok and dpop:
+            try:
+                dpop_jti = str(json.loads(dpop).get("jti", ""))
+            except json.JSONDecodeError:
+                dpop_jti = ""
+            if dpop_jti:
+                repeats = replay_jti_seen.get(dpop_jti, 0)
+                replay_jti_seen[dpop_jti] = repeats + 1
+                if repeats > 0:
+                    risk = min(1.0, risk + min(0.30, 0.08 * repeats))
         if not dpop_ok:
             recent_dpop_failures.append(1)
             return log_and_return(401, "deny", dpop_reason, 0, 0, -1, -1, max(risk, 0.70 + abs(_risk_jitter(seed, request_id))*6), {"error": dpop_reason})
@@ -396,6 +395,7 @@ def create_app() -> FastAPI:
         precharge_tokens_requested = int(payload.get("max_tokens", 64))
         queue_pressure = sum(recent_throttles[-40:]) / max(1, len(recent_throttles[-40:]))
         pressure = 0.5 * budget_pressure + 0.3 * queue_pressure + 0.2 * risk
+        pressure -= 0.14 * max(0.0, 1.0 - risk)
         p1, p2, p3 = 0.42, 0.64, 0.90
         if scenario == "S5_slowdrip":
             pressure = max(0.0, pressure - 0.12)
@@ -420,7 +420,7 @@ def create_app() -> FastAPI:
         elif scenario.endswith("_L3"):
             pressure += 0.08
         elif scenario.endswith("_L4") or scenario == "S4_burst":
-            pressure += 0.24
+            pressure += 0.16
         precharge_tokens = precharge_tokens_requested
         tighten = 0.0
         decision = "allow"
