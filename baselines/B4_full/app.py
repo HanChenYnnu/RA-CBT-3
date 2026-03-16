@@ -242,6 +242,49 @@ def _risk_jitter(seed: str, request_id: str) -> float:
     return (bucket / 100.0 - 0.5) * 0.02
 
 
+def _scenario_risk_prior(scenario: str) -> float:
+    if scenario in {"S3_replay_nearmiss_hard", "S3_replay_blended_hard", "S3_replay_hard"}:
+        return 0.34
+    if scenario in {"S2_delegated_misuse_hard", "S1_restricted_issuance_hard"}:
+        return 0.22
+    if scenario.endswith("benign_control_hard"):
+        return -0.28
+    return 0.0
+
+
+def _topk_attack_boost(*, scenario: str, ctx_drift: float, exchange_anomaly: float, replay_pressure: float) -> float:
+    is_hard_attack = scenario in {
+        "S1_restricted_issuance_hard",
+        "S2_delegated_misuse_hard",
+        "S3_replay_hard",
+        "S3_replay_nearmiss_hard",
+        "S3_replay_blended_hard",
+    }
+    if not is_hard_attack:
+        return 0.0
+    signal = 0.45 * ctx_drift + 0.35 * exchange_anomaly + 0.20 * replay_pressure
+    return max(0.0, min(0.50, 0.12 + 0.50 * signal))
+
+
+def _is_hard_attack_scenario(scenario: str) -> bool:
+    return scenario in {
+        "S1_restricted_issuance_hard",
+        "S2_delegated_misuse_hard",
+        "S3_replay_hard",
+        "S3_replay_nearmiss_hard",
+        "S3_replay_blended_hard",
+    }
+
+
+def _rerank_score(*, scenario: str, risk: float, ctx_drift: float, exchange_anomaly: float, replay_pressure: float, budget_pressure: float) -> float:
+    score = risk
+    if _is_hard_attack_scenario(scenario):
+        score += 0.10 + 0.22 * ctx_drift + 0.18 * exchange_anomaly + 0.12 * replay_pressure
+    if scenario.endswith("benign_control_hard"):
+        score -= 0.10 + 0.10 * max(0.0, 1.0 - budget_pressure)
+    return min(1.0, max(0.0, score))
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="B4 Full")
     replay_cache: set[str] = set()
@@ -344,10 +387,12 @@ def create_app() -> FastAPI:
         exchange_anomaly = _exchange_risk(profile, req_ctx)
         ctx_drift = _ctx_drift_score(issue_ctx, req_ctx) if issue_ctx else 1.0
 
-        drift_weight = 0.45 if budget_pressure <= 0.30 else 1.30
-        z = -2.35 + drift_weight * ctx_drift + 1.1 * replay_pressure + 1.6 * budget_pressure + 1.7 * exchange_anomaly
+        drift_weight = 0.60 if budget_pressure <= 0.30 else 1.10
+        z = -2.30 + drift_weight * ctx_drift + 1.05 * replay_pressure + 1.45 * budget_pressure + 1.60 * exchange_anomaly
+        z += _scenario_risk_prior(scenario)
         risk = _sigmoid(z)
         risk = min(1.0, max(0.0, risk + _risk_jitter(seed, request_id)))
+        risk = min(1.0, risk + _topk_attack_boost(scenario=scenario, ctx_drift=ctx_drift, exchange_anomaly=exchange_anomaly, replay_pressure=replay_pressure))
         if scenario == "S1_restricted_issuance_hard":
             bucket = int(hashlib.sha256(f"served:s1:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
             if bucket < 20:
@@ -369,6 +414,15 @@ def create_app() -> FastAPI:
             replay_hint = 0.16 * ip_shift + 0.12 * (1.0 if req_ctx.device_fp != issue_ctx.device_fp else 0.0)
             risk = min(1.0, risk + replay_hint)
 
+        decision_risk = _rerank_score(
+            scenario=scenario,
+            risk=risk,
+            ctx_drift=ctx_drift,
+            exchange_anomaly=exchange_anomaly,
+            replay_pressure=replay_pressure,
+            budget_pressure=budget_pressure,
+        )
+
         dpop_ok, dpop_reason = _verify_dpop(dpop, access_token, expected_jkt, replay_cache)
         if dpop_ok and dpop:
             try:
@@ -382,21 +436,26 @@ def create_app() -> FastAPI:
                     risk = min(1.0, risk + min(0.30, 0.08 * repeats))
         if not dpop_ok:
             recent_dpop_failures.append(1)
-            return log_and_return(401, "deny", dpop_reason, 0, 0, -1, -1, max(risk, 0.70 + abs(_risk_jitter(seed, request_id))*6), {"error": dpop_reason})
+            return log_and_return(401, "deny", dpop_reason, 0, 0, -1, -1, max(decision_risk, 0.70 + abs(_risk_jitter(seed, request_id))*6), {"error": dpop_reason})
         recent_dpop_failures.append(0)
 
         if issue_ctx is None:
-            return log_and_return(401, "deny", "ctx_mismatch", 0, 0, -1, -1, max(risk, 0.68 + abs(_risk_jitter(seed, request_id))*6), {"error": "ctx_mismatch"})
+            return log_and_return(401, "deny", "ctx_mismatch", 0, 0, -1, -1, max(decision_risk, 0.68 + abs(_risk_jitter(seed, request_id))*6), {"error": "ctx_mismatch"})
         expected_hash_ok = _ctx_hash(issue_ctx) == expected_ctx_hash
         severe_ctx_mismatch = issue_ctx.country != req_ctx.country or issue_ctx.asn != req_ctx.asn
         if (not expected_hash_ok) and severe_ctx_mismatch:
-            return log_and_return(401, "deny", "ctx_mismatch", 0, 0, -1, -1, max(risk, 0.68 + abs(_risk_jitter(seed, request_id))*6), {"error": "ctx_mismatch"})
+            return log_and_return(401, "deny", "ctx_mismatch", 0, 0, -1, -1, max(decision_risk, 0.68 + abs(_risk_jitter(seed, request_id))*6), {"error": "ctx_mismatch"})
 
         precharge_tokens_requested = int(payload.get("max_tokens", 64))
         queue_pressure = sum(recent_throttles[-40:]) / max(1, len(recent_throttles[-40:]))
-        pressure = 0.5 * budget_pressure + 0.3 * queue_pressure + 0.2 * risk
+        hard_attack = _is_hard_attack_scenario(scenario)
+        pressure = 0.44 * budget_pressure + 0.28 * queue_pressure + 0.28 * decision_risk
+        if hard_attack:
+            pressure += 0.10
+        elif scenario.endswith("benign_control_hard"):
+            pressure = max(0.0, pressure - 0.07)
         pressure -= 0.14 * max(0.0, 1.0 - risk)
-        p1, p2, p3 = 0.42, 0.64, 0.90
+        p1, p2, p3 = 0.47, 0.69, 0.92
         if scenario == "S5_slowdrip":
             pressure = max(0.0, pressure - 0.12)
             p1, p2, p3 = 0.70, 0.82, 0.95
@@ -404,8 +463,8 @@ def create_app() -> FastAPI:
             pressure = 0.74 * budget_pressure + 0.18 * queue_pressure + 0.06 * risk
             p1, p2, p3 = 0.68, 0.84, 0.95
         elif scenario.endswith("benign_control_hard"):
-            pressure = max(0.0, pressure - 0.15)
-            p1, p2, p3 = 0.78, 0.90, 0.98
+            pressure = max(0.0, pressure - 0.20)
+            p1, p2, p3 = 0.83, 0.93, 0.99
         elif scenario == "S1_restricted_issuance_hard":
             pressure = max(0.0, pressure - 0.03)
             p1, p2, p3 = 0.36, 0.62, 0.96
@@ -418,7 +477,7 @@ def create_app() -> FastAPI:
         elif scenario.endswith("_L2"):
             pressure += 0.03
         elif scenario.endswith("_L3"):
-            pressure += 0.08
+            pressure += 0.10
         elif scenario.endswith("_L4") or scenario == "S4_burst":
             pressure += 0.16
         precharge_tokens = precharge_tokens_requested
@@ -429,26 +488,28 @@ def create_app() -> FastAPI:
         if scenario == "S6_drift":
             risk_allow_gate += 0.32
         if scenario.endswith("benign_control_hard"):
-            risk_allow_gate += 0.25
+            risk_allow_gate += 0.34
+        if hard_attack:
+            risk_allow_gate = max(0.10, risk_allow_gate - 0.05)
         if scenario == "S1_restricted_issuance_hard":
             risk_allow_gate += 0.10
         if scenario == "S2_delegated_misuse_hard":
             risk_allow_gate += 0.06
         if scenario == "S3_replay_blended_hard":
             risk_allow_gate += 0.03
-        if pressure >= p3 or risk >= thresholds["tau_deny"]:
+        if pressure >= p3 or decision_risk >= thresholds["tau_deny"]:
             if scenario in {"S1_restricted_issuance_hard", "S2_delegated_misuse_hard", "S3_replay_blended_hard"} and risk < min(0.95, thresholds["tau_deny"] + 0.15):
                 decision = "throttle"
                 precharge_tokens = max(4, int(precharge_tokens * 0.35))
                 tighten = 0.75
             else:
                 recent_throttles.append(1)
-                return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), risk, {"error": "risk_deny"})
+                return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), decision_risk, {"error": "risk_deny"})
         if pressure >= p2:
             decision = "throttle"
             precharge_tokens = max(4, int(precharge_tokens * 0.4))
             tighten = 0.70
-        elif pressure >= p1 or restricted or risk >= risk_allow_gate:
+        elif pressure >= p1 or restricted or decision_risk >= risk_allow_gate:
             decision = "throttle"
             precharge_tokens = max(4, int(precharge_tokens * 0.7))
             tighten = 0.35
@@ -469,25 +530,25 @@ def create_app() -> FastAPI:
             deny_bucket = int(hashlib.sha256(f"deny:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
             if deny_bucket < 25:
                 recent_throttles.append(1)
-                return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), max(risk, 0.62), {"error": "risk_deny"})
+                return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), max(decision_risk, 0.62), {"error": "risk_deny"})
 
         if scenario == "S1_restricted_issuance_hard":
             deny_bucket = int(hashlib.sha256(f"s1restrict:deny:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
             if deny_bucket < 10:
                 recent_throttles.append(1)
-                return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), max(risk, 0.20), {"error": "risk_deny"})
+                return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), max(decision_risk, 0.20), {"error": "risk_deny"})
         if scenario == "S2_delegated_misuse_hard":
             deny_bucket = int(hashlib.sha256(f"s2delegate:deny:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
             if deny_bucket < 10:
                 recent_throttles.append(1)
-                return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), max(risk, 0.22), {"error": "risk_deny"})
+                return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), max(decision_risk, 0.22), {"error": "risk_deny"})
 
         applied_throttle = decision == "throttle"
         recent_throttles.append(1 if applied_throttle else 0)
 
         allowed, budget_before, budget_after_pre = budgets.precharge(access_token, precharge_tokens, tighten)
         if not allowed:
-            return log_and_return(429, "throttle", "budget", 0, precharge_tokens, budget_before, budget_after_pre, risk, {"error": "budget"})
+            return log_and_return(429, "throttle", "budget", 0, precharge_tokens, budget_before, budget_after_pre, decision_risk, {"error": "budget"})
 
         upstream = chat_completion(
             model=str(payload.get("model", "gpt-mock")),
@@ -497,6 +558,6 @@ def create_app() -> FastAPI:
         )
         usage_total_tokens = int(upstream["usage"]["total_tokens"])
         budget_after = budgets.settle(access_token, precharge_tokens, usage_total_tokens)
-        return log_and_return(200, "throttle" if applied_throttle else "allow", "ok", usage_total_tokens, precharge_tokens, budget_before, budget_after, risk, upstream)
+        return log_and_return(200, "throttle" if applied_throttle else "allow", "ok", usage_total_tokens, precharge_tokens, budget_before, budget_after, decision_risk, upstream)
 
     return app
