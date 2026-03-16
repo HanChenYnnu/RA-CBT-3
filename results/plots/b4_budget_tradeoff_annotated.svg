@@ -2,20 +2,20 @@
 <text x="20" y="24" font-size="16">B4 Mixed-load Contention Tradeoff (annotated)</text>
 <line x1="50" y1="370" x2="590" y2="370" stroke="black"/>
 <line x1="50" y1="370" x2="50" y2="50" stroke="black"/>
-<polyline fill="none" stroke="#1f77b4" stroke-width="2" points="590.0,50.0 382.5,167.4 236.3,248.7 130.2,306.4 50.0,350.4"/>
+<polyline fill="none" stroke="#1f77b4" stroke-width="2" points="590.0,50.0 358.2,175.9 207.1,257.7 98.8,314.4 50.0,340.6"/>
 <line x1="450" y1="35" x2="470" y2="35" stroke="#1f77b4" stroke-width="2"/>
 <text x="474" y="39" font-size="11">attack ASR_non_deny</text>
-<polyline fill="none" stroke="#d62728" stroke-width="2" points="590.0,116.5 382.5,222.2 236.3,285.8 130.2,339.7 50.0,370.0"/>
+<polyline fill="none" stroke="#d62728" stroke-width="2" points="590.0,125.5 358.2,226.3 207.1,295.5 98.8,352.2 50.0,370.0"/>
 <line x1="450" y1="51" x2="470" y2="51" stroke="#d62728" stroke-width="2"/>
 <text x="474" y="55" font-size="11">benign SR</text>
 <circle cx="590.0" cy="50.0" r="3" fill="#111"/>
 <text x="595.0" y="45.0" font-size="10">x1.00</text>
-<circle cx="382.5" cy="167.4" r="3" fill="#111"/>
-<text x="387.5" y="162.4" font-size="10">x0.70</text>
-<circle cx="236.3" cy="248.7" r="3" fill="#111"/>
-<text x="241.3" y="243.7" font-size="10">x0.50</text>
-<circle cx="130.2" cy="306.4" r="3" fill="#111"/>
-<text x="135.2" y="301.4" font-size="10">x0.35</text>
-<circle cx="50.0" cy="350.4" r="3" fill="#111"/>
-<text x="55.0" y="345.4" font-size="10">x0.25</text>
+<circle cx="358.2" cy="175.9" r="3" fill="#111"/>
+<text x="363.2" y="170.9" font-size="10">x0.70</text>
+<circle cx="207.1" cy="257.7" r="3" fill="#111"/>
+<text x="212.1" y="252.7" font-size="10">x0.50</text>
+<circle cx="98.8" cy="314.4" r="3" fill="#111"/>
+<text x="103.8" y="309.4" font-size="10">x0.35</text>
+<circle cx="50.0" cy="340.6" r="3" fill="#111"/>
+<text x="55.0" y="335.6" font-size="10">x0.25</text>
 </svg>
