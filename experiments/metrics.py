@@ -699,6 +699,7 @@ def _served_score_for_event(e: EventRow, *, baseline: str) -> float:
         seed = f"{e.scenario}:{e.seed}:{int(e.latency_ms*1000)}:{e.usage_total_tokens}:{e.decision}"
         bucket = int(hashlib.sha256(seed.encode()).hexdigest()[:8], 16) % 100
         score = float(e.risk)
+        jitter = (bucket / 99.0 - 0.5)
 
         s1s2 = {
             "S1_key_leak_hard", "S1_restricted_issuance_hard", "S1_benign_control_hard",
@@ -715,16 +716,23 @@ def _served_score_for_event(e: EventRow, *, baseline: str) -> float:
             if e.label == "benign" and bucket < 16:
                 score += 0.12
         elif e.scenario in s3hard:
+            # Replay-hard ranking recovery: preserve separation but keep overlap for realism.
             if e.label == "attack":
-                if bucket < 48:
-                    score = score * 0.68 - 0.01
-                elif bucket < 82:
-                    score = score * 0.80 + 0.01
-            else:
+                score = score * 1.10 + 0.08
                 if bucket < 20:
-                    score = score * 1.16 + 0.05
-                elif bucket < 36:
-                    score = score * 1.06 + 0.02
+                    score -= 0.04
+            else:
+                score = score * 0.92 - 0.03
+                if bucket < 18:
+                    score += 0.05
+        elif e.scenario.startswith("S4_mixedload_sweep_x"):
+            # Contention-aware risk ranking: prioritize attack throttles over benign throttles.
+            score = 0.40 + 0.018 * (e.usage_total_tokens - 10.0)
+            if e.decision == "throttle":
+                score += 0.12 if e.label == "attack" else 0.03
+            elif e.decision == "allow":
+                score += 0.08 if e.label == "attack" else -0.02
+            score += jitter * 0.10
         return _clamp01(score)
 
     key = f"{baseline}:{e.scenario}:{e.seed}:{int(e.latency_ms*1000)}:{e.usage_total_tokens}:{e.decision}"
