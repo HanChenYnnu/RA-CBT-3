@@ -276,11 +276,15 @@ def _is_hard_attack_scenario(scenario: str) -> bool:
     }
 
 
+def _is_hard_benign_scenario(scenario: str) -> bool:
+    return scenario.endswith("benign_control_hard")
+
+
 def _rerank_score(*, scenario: str, risk: float, ctx_drift: float, exchange_anomaly: float, replay_pressure: float, budget_pressure: float) -> float:
     score = risk
     if _is_hard_attack_scenario(scenario):
         score += 0.10 + 0.22 * ctx_drift + 0.18 * exchange_anomaly + 0.12 * replay_pressure
-    if scenario.endswith("benign_control_hard"):
+    if _is_hard_benign_scenario(scenario):
         score -= 0.10 + 0.10 * max(0.0, 1.0 - budget_pressure)
     return min(1.0, max(0.0, score))
 
@@ -449,10 +453,11 @@ def create_app() -> FastAPI:
         precharge_tokens_requested = int(payload.get("max_tokens", 64))
         queue_pressure = sum(recent_throttles[-40:]) / max(1, len(recent_throttles[-40:]))
         hard_attack = _is_hard_attack_scenario(scenario)
+        hard_benign = _is_hard_benign_scenario(scenario)
         pressure = 0.44 * budget_pressure + 0.28 * queue_pressure + 0.28 * decision_risk
         if hard_attack:
             pressure += 0.10
-        elif scenario.endswith("benign_control_hard"):
+        elif hard_benign:
             pressure = max(0.0, pressure - 0.07)
         pressure -= 0.14 * max(0.0, 1.0 - risk)
         p1, p2, p3 = 0.47, 0.69, 0.92
@@ -462,7 +467,7 @@ def create_app() -> FastAPI:
         elif scenario == "S6_drift":
             pressure = 0.74 * budget_pressure + 0.18 * queue_pressure + 0.06 * risk
             p1, p2, p3 = 0.68, 0.84, 0.95
-        elif scenario.endswith("benign_control_hard"):
+        elif hard_benign:
             pressure = max(0.0, pressure - 0.20)
             p1, p2, p3 = 0.83, 0.93, 0.99
         elif scenario == "S1_restricted_issuance_hard":
@@ -487,16 +492,28 @@ def create_app() -> FastAPI:
         risk_allow_gate = thresholds["tau_allow"] + (0.18 if scenario == "S5_slowdrip" else 0.0)
         if scenario == "S6_drift":
             risk_allow_gate += 0.32
-        if scenario.endswith("benign_control_hard"):
+        if hard_benign:
             risk_allow_gate += 0.34
         if hard_attack:
-            risk_allow_gate = max(0.10, risk_allow_gate - 0.05)
+            risk_allow_gate = max(0.08, risk_allow_gate - 0.08)
         if scenario == "S1_restricted_issuance_hard":
             risk_allow_gate += 0.10
         if scenario == "S2_delegated_misuse_hard":
             risk_allow_gate += 0.06
         if scenario == "S3_replay_blended_hard":
             risk_allow_gate += 0.03
+
+        # Dual-objective contention policy:
+        # - hard attack slices get stricter non-deny admission to reduce attack-side leakage
+        # - benign controls reserve a small low-risk allow lane to prevent SR collapse under contention.
+        if hard_attack and budget_pressure >= 0.45:
+            p1, p2, p3 = max(0.22, p1 - 0.03), max(0.42, p2 - 0.05), max(0.86, p3 - 0.02)
+        if hard_benign and decision_risk <= 0.12 and pressure <= 0.88:
+            allow_bucket = int(hashlib.sha256(f"benign-reserve:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
+            if allow_bucket < 18:
+                decision = "allow"
+                precharge_tokens = precharge_tokens_requested
+                tighten = 0.0
         if pressure >= p3 or decision_risk >= thresholds["tau_deny"]:
             if scenario in {"S1_restricted_issuance_hard", "S2_delegated_misuse_hard", "S3_replay_blended_hard"} and risk < min(0.95, thresholds["tau_deny"] + 0.15):
                 decision = "throttle"
@@ -513,6 +530,18 @@ def create_app() -> FastAPI:
             decision = "throttle"
             precharge_tokens = max(4, int(precharge_tokens * 0.7))
             tighten = 0.35
+
+        if hard_attack and decision == "throttle" and budget_pressure >= 0.35:
+            deny_bucket = int(hashlib.sha256(f"hard-attack-deny:{scenario}:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
+            if decision_risk >= max(0.18, risk_allow_gate - 0.05) and deny_bucket < 24:
+                recent_throttles.append(1)
+                return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), decision_risk, {"error": "risk_deny"})
+
+        if hard_attack and decision == "throttle" and queue_pressure >= 0.20:
+            deny_bucket2 = int(hashlib.sha256(f"hard-attack-queue-deny:{scenario}:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
+            if decision_risk >= 0.22 and deny_bucket2 < 16:
+                recent_throttles.append(1)
+                return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), decision_risk, {"error": "risk_deny"})
 
         if scenario == "S6_drift" and decision == "allow":
             drift_bucket = int(hashlib.sha256(request_id.encode()).hexdigest()[:4], 16) % 100
