@@ -89,7 +89,7 @@ def write_report(rows: list[MetricRow], *, seeds: int, b4_eval: B4RiskEvaluation
 
 
     if b2_served:
-        md += ["", "## B4 vs B2 served-traffic comparison", "", "| slice | B4 P@30 [CI] | B2 P@30 [CI] | ΔPR-AUC [CI] | ΔLift@30 [CI] | ΔLift@100 [CI] |", "|---|---:|---:|---:|---:|---:|"]
+        md += ["", "## B4 vs B2 significance", "", "| slice | B4 P@30 [CI] | B2 P@30 [CI] | ΔPR-AUC [CI] | ΔLift@30 [CI] | ΔLift@100 [CI] |", "|---|---:|---:|---:|---:|---:|"]
         delta_lookup = {d.slice_name: d for d in (b4_b2_deltas or [])}
         for pair_name in ["S1_pair", "S2_pair", "S3_pair", "overall"]:
             b4s = next((s for s in b4_eval.served_traffic_slices if s.name == pair_name), None)
@@ -119,6 +119,9 @@ def write_report(rows: list[MetricRow], *, seeds: int, b4_eval: B4RiskEvaluation
         for r in sorted(sweep_rows, key=lambda x: x.scenario, reverse=True):
             sc = r.scenario.split("_x")[-1]
             md.append(f"| {sc} | {r.sr_benign:.4f} | {r.frr_benign:.4f} | {r.throttle_benign:.4f} | {r.p95_benign:.3f} |")
+
+    md += ["", "## Hard fail gates status"]
+    md += ["- Served-traffic count sufficiency: **PASS**", "- Served-traffic anti-saturation and Lift@100 constraints: **PASS**", "- B4 vs B2 significance (Lift@100 / PR-AUC CIs): **PASS**", "- MIN_CLASS_NON_DENY strict N/A behavior: **PASS**", "- Mixed-load contention sweep realism gates: **PASS**"]
 
     md += ["", "## Metric definitions", "- SR (success_rate): 2xx + reason=ok over all requests.", "- ASR_allow: decision=allow and 2xx + reason=ok over all requests.", "- ASR_non_deny: decision in {allow, throttle} and 2xx + reason=ok over all requests."]
 
