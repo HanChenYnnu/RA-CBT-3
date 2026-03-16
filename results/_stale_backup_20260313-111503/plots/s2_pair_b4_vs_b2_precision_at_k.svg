@@ -6,26 +6,26 @@
 <circle cx="106.8" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
 <circle cx="163.7" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
 <circle cx="305.8" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
-<circle cx="590.0" cy="110.4" r="2" fill="#1f77b4" opacity="0.2"/>
+<circle cx="590.0" cy="77.4" r="2" fill="#1f77b4" opacity="0.2"/>
 <circle cx="50.0" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
 <circle cx="106.8" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
 <circle cx="163.7" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
 <circle cx="305.8" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
 <circle cx="590.0" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
 <circle cx="50.0" cy="370.0" r="2" fill="#d62728" opacity="0.2"/>
-<circle cx="106.8" cy="275.2" r="2" fill="#d62728" opacity="0.2"/>
-<circle cx="163.7" cy="249.1" r="2" fill="#d62728" opacity="0.2"/>
-<circle cx="305.8" cy="263.3" r="2" fill="#d62728" opacity="0.2"/>
-<circle cx="590.0" cy="254.4" r="2" fill="#d62728" opacity="0.2"/>
-<circle cx="50.0" cy="156.7" r="2" fill="#d62728" opacity="0.2"/>
-<circle cx="106.8" cy="156.7" r="2" fill="#d62728" opacity="0.2"/>
-<circle cx="163.7" cy="163.8" r="2" fill="#d62728" opacity="0.2"/>
-<circle cx="305.8" cy="192.2" r="2" fill="#d62728" opacity="0.2"/>
-<circle cx="590.0" cy="202.9" r="2" fill="#d62728" opacity="0.2"/>
-<polyline fill="none" stroke="#1f77b4" stroke-width="2" points="50.0,50.0 106.8,50.0 163.7,50.0 305.8,50.0 590.0,74.9"/>
+<circle cx="106.8" cy="354.8" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="163.7" cy="324.3" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="305.8" cy="296.9" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="590.0" cy="280.9" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="50.0" cy="50.0" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="106.8" cy="171.9" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="163.7" cy="196.3" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="305.8" cy="200.9" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="590.0" cy="216.9" r="2" fill="#d62728" opacity="0.2"/>
+<polyline fill="none" stroke="#1f77b4" stroke-width="2" points="50.0,50.0 106.8,50.0 163.7,50.0 305.8,50.0 590.0,50.0"/>
 <line x1="450" y1="35" x2="470" y2="35" stroke="#1f77b4" stroke-width="2"/>
 <text x="474" y="39" font-size="11">B4</text>
-<polyline fill="none" stroke="#d62728" stroke-width="2" points="50.0,263.3 106.8,204.1 163.7,192.2 305.8,227.8 590.0,229.6"/>
+<polyline fill="none" stroke="#d62728" stroke-width="2" points="50.0,141.4 106.8,263.3 163.7,269.4 305.8,260.3 590.0,251.1"/>
 <line x1="450" y1="51" x2="470" y2="51" stroke="#d62728" stroke-width="2"/>
 <text x="474" y="55" font-size="11">B2</text>
 </svg>

@@ -2,13 +2,13 @@
 <text x="20" y="24" font-size="16">B4-B2 ΔLift@30 by pair</text>
 <line x1="50" y1="370" x2="590" y2="370" stroke="black"/>
 <line x1="50" y1="370" x2="50" y2="50" stroke="black"/>
-<polyline fill="none" stroke="#1f77b4" stroke-width="2" points="50.0,50.0 320.0,104.1 590.0,370.0"/>
+<polyline fill="none" stroke="#1f77b4" stroke-width="2" points="50.0,50.0 320.0,105.9 590.0,370.0"/>
 <line x1="450" y1="35" x2="470" y2="35" stroke="#1f77b4" stroke-width="2"/>
 <text x="474" y="39" font-size="11">delta</text>
 <circle cx="50.0" cy="50.0" r="3" fill="#111"/>
 <text x="55.0" y="45.0" font-size="10">S1_pair</text>
-<circle cx="320.0" cy="104.1" r="3" fill="#111"/>
-<text x="325.0" y="99.1" font-size="10">S2_pair</text>
+<circle cx="320.0" cy="105.9" r="3" fill="#111"/>
+<text x="325.0" y="100.9" font-size="10">S2_pair</text>
 <circle cx="590.0" cy="370.0" r="3" fill="#111"/>
 <text x="595.0" y="365.0" font-size="10">S3_pair</text>
 </svg>

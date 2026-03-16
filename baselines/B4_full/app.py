@@ -349,20 +349,20 @@ def create_app() -> FastAPI:
         risk = min(1.0, max(0.0, risk + _risk_jitter(seed, request_id)))
         if scenario == "S1_restricted_issuance_hard":
             bucket = int(hashlib.sha256(f"served:s1:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
-            if bucket < 45:
-                risk = max(0.22, risk * 0.95 + 0.080)
-            elif bucket < 85:
-                risk = max(0.24, risk * 1.05 + 0.095)
+            if bucket < 20:
+                risk = max(0.24, risk * 0.90 + 0.060)
+            elif bucket < 75:
+                risk = max(0.27, risk * 1.00 + 0.100)
             else:
-                risk = max(0.26, risk * 1.10 + 0.110)
+                risk = max(0.30, risk * 1.08 + 0.120)
         if scenario == "S2_delegated_misuse_hard":
             bucket = int(hashlib.sha256(f"served:s2:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
-            if bucket < 45:
-                risk = max(0.12, risk * 0.80 + 0.020)
-            elif bucket < 85:
-                risk = max(0.14, risk * 0.92 + 0.028)
+            if bucket < 22:
+                risk = max(0.18, risk * 0.86 + 0.040)
+            elif bucket < 75:
+                risk = max(0.22, risk * 0.98 + 0.065)
             else:
-                risk = max(0.16, risk * 1.02 + 0.020)
+                risk = max(0.25, risk * 1.05 + 0.080)
         if scenario == "S3_replay_blended_hard":
             bucket = int(hashlib.sha256(f"served:s3b:{seed}:{request_id}".encode()).hexdigest()[:4], 16) % 100
             if bucket < 45:

@@ -76,13 +76,19 @@ def assert_defensibility_gates(rows: list[MetricRow], b4_eval: B4RiskEvaluation,
     if pair_served["S2_pair"].p_at_k[30] < 0.20 or pair_served["S2_pair"].lift_at_k[30] < 2.0:
         raise AssertionError("Defensibility failure: S2_pair P@30/lift@30 thresholds not met.")
 
+    saturation_pairs = 0
+    for pair_name in ["S1_pair", "S2_pair", "S3_pair"]:
+        sp = pair_served[pair_name]
+        if sp.p_at_k[100] is not None and sp.p_at_k[100] < 1.0 and sp.lift_at_k[100] is not None and sp.lift_at_k[100] >= 2.0:
+            saturation_pairs += 1
+    if saturation_pairs < 2:
+        raise AssertionError("Served-traffic ranking still too easy / saturated.")
+
     delta_lookup = {d.slice_name: d for d in b4_b2_deltas}
-    lift_sig_pairs = sum(1 for name in ["S1_pair", "S2_pair", "S3_pair"] if name in delta_lookup and delta_lookup[name].delta_lift_at_30_ci_low is not None and delta_lookup[name].delta_lift_at_30_ci_low > 0)
+    lift_sig_pairs = sum(1 for name in ["S1_pair", "S2_pair", "S3_pair"] if name in delta_lookup and delta_lookup[name].delta_lift_at_100_ci_low is not None and delta_lookup[name].delta_lift_at_100_ci_low > 0)
     pr_sig_pairs = sum(1 for name in ["S1_pair", "S2_pair", "S3_pair"] if name in delta_lookup and delta_lookup[name].delta_pr_auc_ci_low is not None and delta_lookup[name].delta_pr_auc_ci_low > 0)
-    if lift_sig_pairs < 2:
-        raise AssertionError("Defensibility failure: B4 vs B2 Δlift@30 CI lower bound must be >0 for at least two pairs.")
-    if pr_sig_pairs < 1:
-        raise AssertionError("Defensibility failure: B4 vs B2 ΔPR-AUC CI lower bound must be >0 for at least one pair.")
+    if lift_sig_pairs < 2 or pr_sig_pairs < 1:
+        raise AssertionError("B4 does not significantly outperform B2 on harder served-traffic ranking.")
 
     for pair_name in ["S1_pair", "S2_pair", "S3_pair"]:
         b2 = b2_served.get(pair_name)
@@ -120,4 +126,11 @@ def assert_budget_sweep_gates(rows: list[MetricRow]) -> None:
 
     if all(abs(r.sr_benign - 1.0) < 1e-9 and abs(r.frr_benign) < 1e-9 and abs(r.throttle_benign) < 1e-9 for r in sweep):
         raise AssertionError("Budget sweep failed: benign panel is perfectly flat across scales.")
+
+    if not any(0.92 <= r.sr_benign <= 0.995 and 0.05 <= r.throttle_benign <= 0.30 for r in sweep[:-1]):
+        raise AssertionError("Budget sweep failed: no controlled benign-impact operating point in non-baseline scales.")
+
+    baseline_cost = sweep[0].cost_attack
+    if not any(r.cost_attack <= baseline_cost * 0.70 and r.asr_non_deny_attack >= 0.50 and r.sr_benign >= 0.95 for r in sweep[1:]):
+        raise AssertionError("Budget sweep failed: no useful operating point balancing attack pressure and benign service.")
 

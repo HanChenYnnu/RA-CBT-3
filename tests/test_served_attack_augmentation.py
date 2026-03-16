@@ -9,12 +9,12 @@ def _evt(scenario: str, label: str, decision: str = "throttle") -> EventRow:
 
 def test_served_attack_counts_preflight_targets() -> None:
     events = []
-    events += [_evt("S1_restricted_issuance_hard", "attack") for _ in range(30)]
-    events += [_evt("S1_benign_control_hard", "benign") for _ in range(40)]
-    events += [_evt("S2_delegated_misuse_hard", "attack") for _ in range(30)]
-    events += [_evt("S2_benign_control_hard", "benign") for _ in range(40)]
-    events += [_evt("S3_replay_nearmiss_hard", "attack") for _ in range(30)]
-    events += [_evt("S3_benign_control_hard", "benign") for _ in range(40)]
+    events += [_evt("S1_restricted_issuance_hard", "attack") for _ in range(55)]
+    events += [_evt("S1_benign_control_hard", "benign") for _ in range(120)]
+    events += [_evt("S2_delegated_misuse_hard", "attack") for _ in range(55)]
+    events += [_evt("S2_benign_control_hard", "benign") for _ in range(120)]
+    events += [_evt("S3_replay_nearmiss_hard", "attack") for _ in range(55)]
+    events += [_evt("S3_benign_control_hard", "benign") for _ in range(120)]
     validate_served_traffic_preflight(events)
 
 
