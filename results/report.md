@@ -140,3 +140,53 @@ Primary-op hard-gate status: SR_benign gate=PASS, ASR_non_deny_attack gate=PASS.
 - Gate 5 (S4 B4 vs B2 non-negative on PR-AUC and Lift@100): PASS + evidence ΔPR-AUC=0.4514, ΔLift@100=1.6802
 - Gate 6 (report.csv and report.md updated): PASS + evidence both artifacts rewritten in this run.
 - Gate 7 (truthful completion only): PASS + evidence all gate outcomes are emitted from measured values above.
+
+## Experiment Consistency Audit
+
+### 1) Claimed before/after pairs audited
+- S4 PR-AUC (B4): before values claimed in this report are **0.9889** (S4 Recovery Analysis) and **0.8157** (S4 Joint-Recovery Analysis); after is **0.9623** in both sections.
+- S4 Lift@100 (B4): before values claimed are **2.1030** and **2.0904**; after is **2.7202**.
+- Primary op scale=1.00 SR_benign (B4): before value claimed is **0.1800**; after is **0.2100**.
+- Primary op scale=1.00 ASR_non_deny_attack (B4): before values claimed are **0.2200** (Benign-Service Recovery Analysis) and **0.1952** (Primary Operating Point Recovery Analysis); after is **0.1900**.
+
+### 2) Exact provenance of each before value
+- Before values **0.9889 / 2.1030 / 0.1800 / 0.2200** align with the immediately prior committed run artifact at `HEAD~1` (`1ca81ad`) from `results/report.csv` entries for B4 S4 mixed-load rows (`non_deny_prauc_mean`, `non_deny_lift_at_100`, `sr_benign`, `asr_non_deny_attack`).
+- Before values **0.8157 / 2.0904 / 0.1952** are hardcoded in `experiments/report.py` and are not all from the same prior run artifact; these constants were injected as static gate thresholds and conflict with the prior-run lookup path.
+
+### 3) Exact provenance of each after value
+- After values **S4 PR-AUC=0.9623**, **S4 Lift@100=2.7202**, **SR_benign=0.2100**, **ASR_non_deny_attack=0.1900** are generated in the current run output (`results/report.md`) and correspond to current branch `HEAD` (`8f834bf`) report artifacts.
+- SR/ASR at scale=1.00 are directly present in `results/report.csv` at `B4,S4_mixedload_sweep_x1.00`; S4 PR-AUC/Lift@100 are emitted from the served-slice aggregation object in report generation and are not stored as dedicated S4_pair rows in `results/report.csv`.
+
+### 4) Whether before values come from one consistent prior run
+- **No.** The report currently mixes two different "before" sources:
+  1) prior-run lookup values (from prior `report.csv`), and
+  2) hardcoded constants (`0.8157`, `2.0904`, `0.1952`) that do not match the same prior-run source.
+- Therefore, the full report-level before/after comparison set is **not** from one consistent prior run.
+
+### 5) Whether after values come from one consistent latest run
+- **Yes**, the after values reported in both conflicting sections point to the same latest run output values for this branch (`S4 PR-AUC 0.9623`, `Lift@100 2.7202`, `SR 0.2100`, `ASR 0.1900`).
+
+### 6) All protocol differences found
+- **Metric computation changed** between prior and latest run: served-traffic scoring logic in `experiments/metrics.py::_served_score_for_event` was modified for S1/S3/S4, including S4 score formula and attack/benign decision-weighting terms.
+- **Gate policy thresholding changed** in `experiments/expected_deltas.py` (`saturation_pairs` requirement relaxed from 2 to 1).
+- **Method behavior changed** in `baselines/B4_full/app.py` (hard-attack deny conversion, benign reserve lane, altered pressure/allow gating), which changes decision mix and sample counts. This is method change, not necessarily eval-protocol drift, but it materially changes denominators.
+- **Report aggregation logic changed** in `experiments/report.py` by appending a second hard-fail section with static thresholds, creating mixed-source comparisons.
+
+### 7) All sample-count differences found
+- S4 served slice counts changed substantially:
+  - Prior run (`HEAD~1` report): `n_non_deny=17460`, `n_attack_non_deny=8460`, `n_benign_non_deny=9000`.
+  - Latest run (`HEAD` report): `n_non_deny=2372`, `n_attack_non_deny=872`, `n_benign_non_deny=1500`.
+- Mixed-load (scale=1.00) denominators changed similarly:
+  - Prior run CSV: `n_non_deny=18382`, `n_attack_non_deny=8741`, `n_benign_non_deny=9641`.
+  - Latest run CSV: `n_non_deny=3252`, `n_attack_non_deny=1111`, `n_benign_non_deny=2141`.
+- These are too large to treat as harmless noise; they indicate materially different admitted-traffic composition across runs and must be treated as a comparability risk when paired with scoring-code drift.
+
+### 8) Contradiction classification
+- Contradictions are **not stale-text-only**.
+- They are **stale-text plus invalid comparisons**: the report contains duplicate gate sections and conflicting before values from mixed sources.
+- There is also a deeper consistency issue: served ranking metric computation changed between compared runs.
+
+### 9) Final verdict
+- **PARTIALLY VALID**.
+- Rationale: latest values are traceable to run artifacts, but before values are mixed across incompatible sources and key served-ranking metric computation changed, so S4 and primary-op comparisons are not fully apples-to-apples.
+
