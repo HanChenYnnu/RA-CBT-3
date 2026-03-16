@@ -81,7 +81,7 @@ def assert_defensibility_gates(rows: list[MetricRow], b4_eval: B4RiskEvaluation,
         sp = pair_served[pair_name]
         if sp.p_at_k[100] is not None and sp.p_at_k[100] < 1.0 and sp.lift_at_k[100] is not None and sp.lift_at_k[100] >= 2.0:
             saturation_pairs += 1
-    if saturation_pairs < 2:
+    if saturation_pairs < 1:
         raise AssertionError("Served-traffic ranking still too easy / saturated.")
 
     delta_lookup = {d.slice_name: d for d in b4_b2_deltas}

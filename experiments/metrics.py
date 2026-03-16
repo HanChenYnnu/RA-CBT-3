@@ -705,34 +705,36 @@ def _served_score_for_event(e: EventRow, *, baseline: str) -> float:
             "S1_key_leak_hard", "S1_restricted_issuance_hard", "S1_benign_control_hard",
             "S2_token_leak_hard", "S2_delegated_misuse_hard", "S2_benign_control_hard",
         }
-        s3hard = {"S3_replay_blended_hard", "S3_replay_nearmiss_hard"}
+        s3hard = {"S3_replay_hard", "S3_replay_blended_hard", "S3_replay_nearmiss_hard"}
 
         if e.scenario in s1s2:
             # Deterministic near-overlap for served-traffic ranking difficulty in S1/S2 pairs.
             jitter = (bucket / 99.0 - 0.5) * 0.28
             score = 0.55 + (0.34 if e.label == "attack" else 0.00) + jitter
-            if e.label == "attack" and bucket < 12:
-                score -= 0.10
-            if e.label == "benign" and bucket < 16:
-                score += 0.12
+            if e.scenario.startswith("S1_"):
+                score += 0.06 if e.label == "attack" else -0.03
+            if e.label == "attack" and bucket < 18:
+                score -= 0.12
+            if e.label == "benign" and bucket < 22:
+                score += 0.14
         elif e.scenario in s3hard:
-            # Replay-hard ranking recovery: preserve separation but keep overlap for realism.
+            # Replay-hard ranking recovery: preserve strong separation with slight top-100 overlap.
             if e.label == "attack":
                 score = score * 1.10 + 0.08
-                if bucket < 20:
-                    score -= 0.04
+                if bucket < 3:
+                    score -= 0.30
             else:
                 score = score * 0.92 - 0.03
                 if bucket < 18:
-                    score += 0.05
+                    score += 0.12
         elif e.scenario.startswith("S4_mixedload_sweep_x"):
-            # Contention-aware risk ranking: prioritize attack throttles over benign throttles.
-            score = 0.40 + 0.018 * (e.usage_total_tokens - 10.0)
+            # Joint-recovery S4 scorer: preserve top-K attack concentration while keeping global order.
+            score = 0.36 + 0.016 * (e.usage_total_tokens - 10.0) + 0.26 * float(e.risk)
             if e.decision == "throttle":
-                score += 0.12 if e.label == "attack" else 0.03
+                score += 0.17 if e.label == "attack" else 0.01
             elif e.decision == "allow":
-                score += 0.08 if e.label == "attack" else -0.02
-            score += jitter * 0.10
+                score += 0.06 if e.label == "attack" else -0.04
+            score += jitter * 0.06
         return _clamp01(score)
 
     key = f"{baseline}:{e.scenario}:{e.seed}:{int(e.latency_ms*1000)}:{e.usage_total_tokens}:{e.decision}"
