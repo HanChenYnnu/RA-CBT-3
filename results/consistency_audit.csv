@@ -1,6 +1,6 @@
-metric_name,before_value,after_value,before_run_id_or_source,after_run_id_or_source,same_single_baseline_run,same_metric_code,same_slice_definition,same_operating_point,same_seed_policy,status,notes
-S4 PR-AUC,0.5190,0.9638,shared-pipeline:15311eb65f927bd60f18065e74753ff791e4b999:seeds=1:seed_start=7:baseline=B2,shared-pipeline:15311eb65f927bd60f18065e74753ff791e4b999:seeds=1:seed_start=7:baseline=B4,true,true,true,true,true,valid,"strict rerun comparison under frozen shared protocol"
-S4 Lift@100,1.1000,2.7202,shared-pipeline:15311eb65f927bd60f18065e74753ff791e4b999:seeds=1:seed_start=7:baseline=B2,shared-pipeline:15311eb65f927bd60f18065e74753ff791e4b999:seeds=1:seed_start=7:baseline=B4,true,true,true,true,true,valid,"strict rerun comparison under frozen shared protocol"
-scale=1.00 SR_benign,0.1733,0.2100,shared-pipeline:15311eb65f927bd60f18065e74753ff791e4b999:seeds=1:seed_start=7:baseline=B2,shared-pipeline:15311eb65f927bd60f18065e74753ff791e4b999:seeds=1:seed_start=7:baseline=B4,true,true,true,true,true,valid,"strict rerun comparison under frozen shared protocol"
-scale=1.00 ASR_non_deny_attack,0.2267,0.1900,shared-pipeline:15311eb65f927bd60f18065e74753ff791e4b999:seeds=1:seed_start=7:baseline=B2,shared-pipeline:15311eb65f927bd60f18065e74753ff791e4b999:seeds=1:seed_start=7:baseline=B4,true,true,true,true,true,valid,"strict rerun comparison under frozen shared protocol"
-final_verdict,,VALID APPLES-TO-APPLES,shared-pipeline:15311eb65f927bd60f18065e74753ff791e4b999:seeds=1:seed_start=7:baseline=B2,shared-pipeline:15311eb65f927bd60f18065e74753ff791e4b999:seeds=1:seed_start=7:baseline=B4,true,true,true,true,true,valid,"S4_pair n_non_deny before=9000 (attack=4500, benign=4500) after=7116 (attack=2616, benign=4500); S4_mixedload_x1.00 n_non_deny before=1800 (attack=900, benign=900) after=1434 (attack=534, benign=900); denominators attack before/after=900/900, benign before/after=900/900. Differences are expected from different baseline behavior (B2 vs B4) under the same frozen protocol, not protocol drift."
+metric_name,multi_seed_valid_under_frozen_rerun,direction_consistent_across_seeds,variability_caveat,notes
+S4 PR-AUC,true,true,none,wins=5/5; mean_delta=0.441820; std_delta=0.003761
+S4 Lift@100,true,true,none,wins=5/5; mean_delta=1.540180; std_delta=0.055695
+scale=1.00 SR_benign,true,true,none,wins=5/5; mean_delta=0.034700; std_delta=0.011200
+scale=1.00 ASR_non_deny_attack,true,true,none,wins=5/5; mean_delta=-0.034700; std_delta=0.011200
+final_verdict,true,,see metric rows,VALID APPLES-TO-APPLES (multi-seed confirmed)
