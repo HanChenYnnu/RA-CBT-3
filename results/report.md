@@ -1,47 +1,46 @@
-# 1. Current Result Snapshot
+# 1. Frozen Evaluation Protocol
+- Strategy chosen: **STRATEGY B — re-run both baseline and current method under one frozen shared pipeline**.
+- Frozen protocol run id: **shared-pipeline:15311eb65f927bd60f18065e74753ff791e4b999:seeds=1:seed_start=7**.
+- Frozen stack (shared for before and after):
+  - metric code: `experiments/metrics.py`
+  - slice definitions: `scripts/run_all.py` LOSO groups + `experiments/scenario_contract.py`
+  - served/non-deny definition + served filtering: `experiments/metrics.py`
+  - mixed-load construction: `experiments/scenarios.py` S4 scenarios
+  - primary operating point: `S4_mixedload_sweep_x1.00`
+  - seed policy: `python -m scripts.run_all --seed 7 --seeds 1`
+  - aggregation and report generation: `experiments/metrics.py` + `experiments/report.py`
 
-Final audited key metrics used in the verdict path:
+# 2. Baseline Selection
+- Single before baseline: **B2 from the same rerun protocol**.
+- Single after run: **B4 from the same rerun protocol**.
+- Why this is defensible: it removes historical mixed-source lookups and computes all compared metrics from one synchronized rerun using one code stack.
 
-| metric_name | latest_value |
-|---|---:|
-| S4 PR-AUC | 0.9623 |
-| S4 Lift@100 | 2.7202 |
-| scale=1.00 SR_benign | 0.2100 |
-| scale=1.00 ASR_non_deny_attack | 0.1900 |
+# 3. Apples-to-Apples Rerun Results
+| metric_name | before (B2) | after (B4) |
+|---|---:|---:|
+| S4 PR-AUC | 0.5190 | 0.9638 |
+| S4 Lift@100 | 1.1000 | 2.7202 |
+| scale=1.00 SR_benign | 0.1733 | 0.2100 |
+| scale=1.00 ASR_non_deny_attack | 0.2267 | 0.1900 |
 
-These are current-run values and are used with explicit comparability caveats.
+# 4. Comparability Verification
+- same metric code: **true**
+- same slice definitions: **true**
+- same operating point: **true**
+- same seed policy: **true**
+- same aggregation logic: **true**
+- same non-deny definition: **true**
+- same served-traffic filtering: **true**
+- same mixed-load construction: **true**
+- Sample-count review:
+  - S4_pair n_non_deny before=9000 (attack=4500, benign=4500), after=7116 (attack=2616, benign=4500).
+  - scale=1.00 mixed-load n_non_deny before=1800 (attack=900, benign=900), after=1434 (attack=534, benign=900).
+  - scale=1.00 mixed-load denominators attack before/after=900/900, benign before/after=900/900.
+  - Interpretation: denominator differences reflect B2 vs B4 behavior under the same protocol, not evaluation drift.
 
-# 2. Audit-Aligned Metric Provenance
+# 5. Final Verdict
+**VALID APPLES-TO-APPLES**
 
-| metric_name | latest_value | before_value_used | before_single_run_consistent | metric_storage_type | report.csv support |
-|---|---:|---:|---|---|---|
-| S4 PR-AUC | 0.9623 | 0.9889 | no | derived_in_report | `audit_summary,S4 PR-AUC,...` |
-| S4 Lift@100 | 2.7202 | 2.1030 | no | derived_in_report | `audit_summary,S4 Lift@100,...` |
-| scale=1.00 SR_benign | 0.2100 | 0.1800 | no | direct_raw_csv | `audit_summary,scale=1.00 SR_benign,...` |
-| scale=1.00 ASR_non_deny_attack | 0.1900 | 0.2200 | no | direct_raw_csv | `audit_summary,scale=1.00 ASR_non_deny_attack,...` |
-
-Notes:
-- The latest SR/ASR values are direct fields from the `B4,S4_mixedload_sweep_x1.00` raw row in `report.csv`.
-- The latest S4 PR-AUC and S4 Lift@100 values are derived/aggregated values recorded in the audit summary block, not directly stored as a single raw S4 row value.
-- Before values used in the verdict path are not from one single consistent prior run.
-
-# 3. Experiment Consistency Audit
-
-- **before source mismatch**: before values were assembled from mixed prior sources rather than one consistent prior run artifact set.
-- **metric code drift**: ranking/served-metric computation changed between compared runs, so metric implementation is not identical across before vs after.
-- Sample-count shifts strengthen comparability risk:
-  - S4 served slice `n_non_deny` shifted from 17,460 (attack 8,460 / benign 9,000) to 2,372 (attack 872 / benign 1,500).
-  - scale=1.00 mixed-load `n_non_deny` shifted from 18,382 (attack 8,741 / benign 9,641) to 3,252 (attack 1,111 / benign 2,141).
-
-# 4. Final Comparability Verdict
-
-Final verdict: **PARTIALLY VALID**
-
-Reason it is not **VALID**:
-- **before source mismatch**
-- **metric code drift**
-- sample-count shifts further increase comparability risk
-
-# 5. Required Follow-Up
-
-A strict apples-to-apples claim requires rerun or re-baselining under one consistent prior run and unchanged metric code.
+# 6. Residual Risks
+- Numeric outcomes can change if future commits modify the frozen stack; rerun under a new stack would require a new apples-to-apples audit.
+- This validation is for the explicit B2->B4 comparison path only; any historical mixed-source comparison remains deprecated.

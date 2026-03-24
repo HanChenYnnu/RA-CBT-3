@@ -1,0 +1,2 @@
+run_protocol_id,strategy,before_baseline,after_baseline,seed_count,seed_start,same_metric_code,same_slice_definition,same_non_deny_definition,same_served_traffic_filtering,same_mixed_load_construction,same_operating_point,same_seed_policy,same_aggregation_logic,same_report_generation_logic,final_verdict
+shared-pipeline:15311eb65f927bd60f18065e74753ff791e4b999:seeds=1:seed_start=7,STRATEGY B — re-run both baseline and current method under one frozen shared pipeline,B2,B4,1,7,true,true,true,true,true,true,true,true,true,VALID APPLES-TO-APPLES
