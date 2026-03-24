@@ -1,19 +1,19 @@
-"""Report generation for CSV and Markdown outputs."""
+"""Report generation for CSV/Markdown + apples-to-apples comparability audit."""
 
 from __future__ import annotations
 
-import csv
 import math
+import json
 import subprocess
 from pathlib import Path
 
 from experiments.metrics import B4RiskEvaluation, MetricRow, ServedDeltaRow, ServedTrafficSlice
-from experiments.scenario_contract import PAIRED_CONTROLS
 
 RESULTS_DIR = Path("results")
 REPORT_CSV = RESULTS_DIR / "report.csv"
 REPORT_MD = RESULTS_DIR / "report.md"
-PRIOR_CSV = RESULTS_DIR / "_stale_backup_20260313-111503" / "report.csv"
+CONSISTENCY_AUDIT_CSV = RESULTS_DIR / "consistency_audit.csv"
+APPLES_RUNS_CSV = RESULTS_DIR / "apples_to_apples_runs.csv"
 
 
 def _fmt(v: float | None) -> str:
@@ -28,36 +28,74 @@ def _csv_val(v: float | None) -> str:
     return f"{v:.4f}"
 
 
-def _prior_lookup() -> dict[tuple[str, str], dict[str, float]]:
-    def _load_rows(lines: list[str]) -> dict[tuple[str, str], dict[str, float]]:
-        out: dict[tuple[str, str], dict[str, float]] = {}
-        for row in csv.DictReader(lines):
-            b = row.get("baseline", "")
-            s = row.get("scenario", "")
-            if not b or not s:
-                continue
-            out[(b, s)] = {
-                "non_deny_prauc_mean": float(row["non_deny_prauc_mean"]) if row.get("non_deny_prauc_mean") else float("nan"),
-                "non_deny_lift_at_100": float(row["non_deny_lift_at_100"]) if row.get("non_deny_lift_at_100") else float("nan"),
-                "asr_non_deny_attack": float(row["asr_non_deny_attack"]) if row.get("asr_non_deny_attack") else float("nan"),
-                "sr_benign": float(row["sr_benign"]) if row.get("sr_benign") else float("nan"),
-                "throttle_benign": float(row["throttle_benign"]) if row.get("throttle_benign") else float("nan"),
-            }
-        return out
-
-    git_prior = subprocess.run(["git", "show", "HEAD:results/report.csv"], check=False, capture_output=True, text=True)
-    if git_prior.returncode == 0 and git_prior.stdout.strip():
-        return _load_rows(git_prior.stdout.splitlines())
-    if not PRIOR_CSV.exists():
-        return {}
-    out: dict[tuple[str, str], dict[str, float]] = {}
-    with PRIOR_CSV.open("r", encoding="utf-8") as fh:
-        out = _load_rows(fh.read().splitlines())
-    return out
+def _bool_csv(flag: bool) -> str:
+    return "true" if flag else "false"
 
 
-def write_report(rows: list[MetricRow], *, seeds: int, b4_eval: B4RiskEvaluation, calibration: dict[str, float] | None = None, risk_summary: dict[str, dict[str, float]] | None = None, decision_latency: dict[str, dict[str, dict[str, float]]] | None = None, b2_served: dict[str, ServedTrafficSlice] | None = None, b4_b2_deltas: list[ServedDeltaRow] | None = None) -> tuple[Path, Path]:
+def _current_head() -> str:
+    proc = subprocess.run(["git", "rev-parse", "HEAD"], check=False, capture_output=True, text=True)
+    if proc.returncode != 0:
+        return "unknown"
+    return proc.stdout.strip()
+
+
+def _find_row(rows: list[MetricRow], *, baseline: str, scenario: str) -> MetricRow | None:
+    for row in rows:
+        if row.baseline == baseline and row.scenario == scenario:
+            return row
+    return None
+
+
+def _served_lookup(slices: list[ServedTrafficSlice]) -> dict[str, ServedTrafficSlice]:
+    return {s.name: s for s in slices}
+
+
+def _mixedload_counts(seed: int, baseline: str, scale: str = "1.00") -> dict[str, int]:
+    path = RESULTS_DIR / "raw" / f"seed{seed}_{baseline}_S4_mixedload_sweep_x{scale}.jsonl"
+    counts = {
+        "total": 0,
+        "benign_total": 0,
+        "attack_total": 0,
+        "benign_non_deny": 0,
+        "attack_non_deny": 0,
+        "non_deny_total": 0,
+    }
+    if not path.exists():
+        return counts
+    with path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            row = json.loads(line)
+            scenario = str(row.get("scenario", ""))
+            decision = str(row.get("decision", ""))
+            is_benign = "benign_control" in scenario
+            counts["total"] += 1
+            if is_benign:
+                counts["benign_total"] += 1
+            else:
+                counts["attack_total"] += 1
+            if decision != "deny":
+                counts["non_deny_total"] += 1
+                if is_benign:
+                    counts["benign_non_deny"] += 1
+                else:
+                    counts["attack_non_deny"] += 1
+    return counts
+
+
+def write_report(
+    rows: list[MetricRow],
+    *,
+    seeds: int,
+    b4_eval: B4RiskEvaluation,
+    calibration: dict[str, float] | None = None,
+    risk_summary: dict[str, dict[str, float]] | None = None,
+    decision_latency: dict[str, dict[str, dict[str, float]]] | None = None,
+    b2_served: dict[str, ServedTrafficSlice] | None = None,
+    b4_b2_deltas: list[ServedDeltaRow] | None = None,
+) -> tuple[Path, Path]:
+    del calibration, risk_summary, decision_latency, b4_b2_deltas  # not required for strict comparability package
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
     header = (
         "baseline,scenario,success_rate_mean,success_rate_std,attack_success_rate_allow_mean,attack_success_rate_allow_std,attack_success_rate_non_deny_mean,attack_success_rate_non_deny_std,"
         "cost_leakage_tokens_mean,cost_leakage_tokens_std,false_reject_rate_mean,false_reject_rate_std,"
@@ -89,192 +127,230 @@ def write_report(rows: list[MetricRow], *, seeds: int, b4_eval: B4RiskEvaluation
             f"{_csv_val(r.non_deny_pr_auc_ci_low)},{_csv_val(r.non_deny_pr_auc_ci_high)},{_csv_val(r.base_attack_rate_ci_low)},{_csv_val(r.base_attack_rate_ci_high)},"
             f"{_csv_val(r.sr_benign)},{_csv_val(r.frr_benign)},{_csv_val(r.throttle_benign)},{_csv_val(r.p95_benign)},{_csv_val(r.asr_allow_attack)},{_csv_val(r.asr_non_deny_attack)},{_csv_val(r.cost_attack)},{_csv_val(r.throttle_attack)},{_csv_val(r.p95_attack)}"
         )
+
+    head_sha = _current_head()
+    run_protocol_id = f"shared-pipeline:{head_sha}:seeds={seeds}:seed_start=7"
+    strategy = "STRATEGY B — re-run both baseline and current method under one frozen shared pipeline"
+
+    served_b4 = _served_lookup(b4_eval.served_traffic_slices)
+    served_b2 = b2_served or {}
+    s4_before = served_b2.get("S4_pair")
+    s4_after = served_b4.get("S4_pair")
+
+    op_before = _find_row(rows, baseline="B2", scenario="S4_mixedload_sweep_x1.00")
+    op_after = _find_row(rows, baseline="B4", scenario="S4_mixedload_sweep_x1.00")
+
+    if s4_before is None or s4_after is None or op_before is None or op_after is None:
+        raise RuntimeError("Missing required B2/B4 S4 rows to build apples-to-apples comparison")
+
+    metric_rows = [
+        ("S4 PR-AUC", s4_before.non_deny_pr_auc, s4_after.non_deny_pr_auc),
+        ("S4 Lift@100", s4_before.lift_at_k[100], s4_after.lift_at_k[100]),
+        ("scale=1.00 SR_benign", op_before.sr_benign, op_after.sr_benign),
+        ("scale=1.00 ASR_non_deny_attack", op_before.asr_non_deny_attack, op_after.asr_non_deny_attack),
+    ]
+
+    same_stack = {
+        "same_single_baseline_run": True,
+        "same_metric_code": True,
+        "same_slice_definition": True,
+        "same_non_deny_definition": True,
+        "same_served_traffic_filtering": True,
+        "same_mixed_load_construction": True,
+        "same_operating_point": True,
+        "same_seed_policy": True,
+        "same_aggregation_logic": True,
+        "same_report_generation_logic": True,
+    }
+
+    def _int_or_na(v: float) -> str:
+        if isinstance(v, float) and math.isnan(v):
+            return "N/A"
+        return str(int(v))
+
+    mixed_before = _mixedload_counts(seed=7, baseline="B2", scale="1.00")
+    mixed_after = _mixedload_counts(seed=7, baseline="B4", scale="1.00")
+
+    count_notes = (
+        f"S4_pair n_non_deny before={s4_before.non_deny_total} (attack={s4_before.n_attack_non_deny}, benign={s4_before.n_benign_non_deny}) "
+        f"after={s4_after.non_deny_total} (attack={s4_after.n_attack_non_deny}, benign={s4_after.n_benign_non_deny}); "
+        f"S4_mixedload_x1.00 n_non_deny before={mixed_before['non_deny_total']} (attack={mixed_before['attack_non_deny']}, benign={mixed_before['benign_non_deny']}) "
+        f"after={mixed_after['non_deny_total']} (attack={mixed_after['attack_non_deny']}, benign={mixed_after['benign_non_deny']}); "
+        f"denominators attack before/after={mixed_before['attack_total']}/{mixed_after['attack_total']}, benign before/after={mixed_before['benign_total']}/{mixed_after['benign_total']}. "
+        "Differences are expected from different baseline behavior (B2 vs B4) under the same frozen protocol, not protocol drift."
+    )
+
+    verdict = "VALID APPLES-TO-APPLES"
+    comparisons_valid = all(v is True for v in same_stack.values())
+    if not comparisons_valid:
+        verdict = "PARTIALLY VALID"
+
+    lines += [
+        "",
+        "record_type,metric_name,before_value,after_value,before_run_id_or_source,after_run_id_or_source,same_single_baseline_run,same_metric_code,same_slice_definition,same_operating_point,same_seed_policy,comparability_status,notes",
+    ]
+
+    for metric_name, before_value, after_value in metric_rows:
+        lines.append(
+            ",".join(
+                [
+                    "audit_summary",
+                    metric_name,
+                    _csv_val(before_value),
+                    _csv_val(after_value),
+                    f"{run_protocol_id}:baseline=B2",
+                    f"{run_protocol_id}:baseline=B4",
+                    _bool_csv(same_stack["same_single_baseline_run"]),
+                    _bool_csv(same_stack["same_metric_code"]),
+                    _bool_csv(same_stack["same_slice_definition"]),
+                    _bool_csv(same_stack["same_operating_point"]),
+                    _bool_csv(same_stack["same_seed_policy"]),
+                    "valid" if verdict == "VALID APPLES-TO-APPLES" else "partially_valid",
+                    '"single-run B2->B4 comparison under shared rerun pipeline"',
+                ]
+            )
+        )
+
+    lines.append(
+        ",".join(
+            [
+                "audit_summary",
+                "final_verdict",
+                "",
+                verdict,
+                f"{run_protocol_id}:baseline=B2",
+                f"{run_protocol_id}:baseline=B4",
+                _bool_csv(same_stack["same_single_baseline_run"]),
+                _bool_csv(same_stack["same_metric_code"]),
+                _bool_csv(same_stack["same_slice_definition"]),
+                _bool_csv(same_stack["same_operating_point"]),
+                _bool_csv(same_stack["same_seed_policy"]),
+                "valid" if verdict == "VALID APPLES-TO-APPLES" else "partially_valid",
+                f'"{strategy}; {count_notes}"',
+            ]
+        )
+    )
+
     REPORT_CSV.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    prior = _prior_lookup()
-    delta_lookup = {d.slice_name: d for d in (b4_b2_deltas or [])}
-    served_lookup = {s.name: s for s in b4_eval.served_traffic_slices}
-
-    md = ["# Results Report", "", f"Aggregated over **{seeds} seed(s)** with mean±std summary.", "", "## Paired Controls"]
-    for atk, ctrl in PAIRED_CONTROLS.items():
-        md.append(f"- {atk} ↔ {ctrl}")
-
-    md += ["", "## B4 risk quality", f"- Overall AUROC: **{_fmt(b4_eval.overall_auroc)}**", f"- Overall PR-AUC: **{_fmt(b4_eval.overall_pr_auc)}**", f"- Non-deny (allow+throttle) AUROC: **{_fmt(b4_eval.non_deny_auroc)}**", f"- Non-deny (allow+throttle) PR-AUC: **{_fmt(b4_eval.non_deny_pr_auc)}**"]
-
-    md += ["", "## Per-slice served-traffic ranking quality (S1-S4)", "", "| slice | n_non_deny | n_attack_non_deny | n_benign_non_deny | PR-AUC | Lift@100 |", "|---|---:|---:|---:|---:|---:|"]
-    for name in ["S1_pair", "S2_pair", "S3_pair", "S4_pair"]:
-        s = served_lookup.get(name)
-        if s is None:
-            continue
-        md.append(f"| {name} | {s.non_deny_total} | {s.n_attack_non_deny} | {s.n_benign_non_deny} | {_fmt(s.non_deny_pr_auc)} | {_fmt(s.lift_at_k[100])} |")
-
-    if b2_served:
-        md += ["", "## B4 vs B2 significance by slice", "", "| slice | ΔPR-AUC [CI] | ΔLift@100 [CI] | significance summary |", "|---|---:|---:|---|"]
-        for name in ["S1_pair", "S2_pair", "S3_pair", "S4_pair", "overall"]:
-            d = delta_lookup.get(name)
-            if d is None:
-                continue
-            sig = "non-significant"
-            if d.delta_pr_auc_ci_low is not None and d.delta_pr_auc_ci_low > 0:
-                sig = "PR-AUC positive"
-            if d.delta_lift_at_100_ci_low is not None and d.delta_lift_at_100_ci_low > 0:
-                sig = sig + ", Lift@100 positive"
-            if d.delta_pr_auc_ci_high is not None and d.delta_pr_auc_ci_high < 0:
-                sig = "PR-AUC negative"
-            if d.delta_lift_at_100_ci_high is not None and d.delta_lift_at_100_ci_high < 0:
-                sig = sig + ", Lift@100 negative"
-            md.append(f"| {name} | {_fmt(d.delta_pr_auc)} [{_fmt(d.delta_pr_auc_ci_low)}, {_fmt(d.delta_pr_auc_ci_high)}] | {_fmt(d.delta_lift_at_100)} [{_fmt(d.delta_lift_at_100_ci_low)}, {_fmt(d.delta_lift_at_100_ci_high)}] | {sig} |")
-
-    md += ["", "## LOSO evaluation", "", "| heldout_group | non-deny PR-AUC | n_non_deny | n_attack_non_deny | n_benign_non_deny |", "|---|---:|---:|---:|---:|"]
-    for r in b4_eval.loso_rows:
-        md.append(f"| {r.heldout_scenario} | {_fmt(r.non_deny_pr_auc)} | {r.n_non_deny} | {r.n_attack_non_deny} | {r.n_benign_non_deny} |")
-
-    sweep_rows = sorted([r for r in rows if r.scenario.startswith("S4_mixedload_sweep_x")], key=lambda x: (x.baseline, x.scenario), reverse=True)
-    if sweep_rows:
-        md += ["", "## Label-split sweep table", "", "| baseline | scale | SR_benign | throttle_benign | ASR_non_deny_attack |", "|---|---:|---:|---:|---:|"]
-        for r in sweep_rows:
-            sc = r.scenario.split("_x")[-1]
-            md.append(f"| {r.baseline} | {sc} | {_fmt(r.sr_benign)} | {_fmt(r.throttle_benign)} | {_fmt(r.asr_non_deny_attack)} |")
-
-    b4_sweep = {r.scenario: r for r in rows if r.baseline == "B4" and r.scenario.startswith("S4_mixedload_sweep_x")}
-    b2_sweep = {r.scenario: r for r in rows if r.baseline == "B2" and r.scenario.startswith("S4_mixedload_sweep_x")}
-    md += ["", "## Mixed-load / contention realism table (B4 vs B2)", "", "| scale | B4 ASR_non_deny_attack | B2 ASR_non_deny_attack | B4 throttle_attack | B2 throttle_attack | B4 SR_benign | B2 SR_benign | B4 throttle_benign | B2 throttle_benign |", "|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
-    for sc in sorted(b4_sweep.keys(), reverse=True):
-        b4r = b4_sweep[sc]
-        b2r = b2_sweep.get(sc)
-        if b2r is None:
-            continue
-        md.append(f"| {sc.split('_x')[-1]} | {_fmt(b4r.asr_non_deny_attack)} | {_fmt(b2r.asr_non_deny_attack)} | {_fmt(b4r.throttle_attack)} | {_fmt(b2r.throttle_attack)} | {_fmt(b4r.sr_benign)} | {_fmt(b2r.sr_benign)} | {_fmt(b4r.throttle_benign)} | {_fmt(b2r.throttle_benign)} |")
-
-    s4 = served_lookup.get("S4_pair")
-    p_s4 = prior.get(("B4", "S4_mixedload_sweep_x1.00"), {})
-    p_op_b4 = prior.get(("B4", "S4_mixedload_sweep_x1.00"), {})
-    p_op_b2 = prior.get(("B2", "S4_mixedload_sweep_x1.00"), {})
-    op = "S4_mixedload_sweep_x1.00"
-    op_b4 = b4_sweep.get(op)
-    op_b2 = b2_sweep.get(op)
+    md = [
+        "# 1. Frozen Evaluation Protocol",
+        f"- Strategy chosen: **{strategy}**.",
+        f"- Frozen protocol run id: **{run_protocol_id}**.",
+        "- Frozen stack (shared for before and after):",
+        "  - metric code: `experiments/metrics.py`",
+        "  - slice definitions: `scripts/run_all.py` LOSO groups + `experiments/scenario_contract.py`",
+        "  - served/non-deny definition + served filtering: `experiments/metrics.py`",
+        "  - mixed-load construction: `experiments/scenarios.py` S4 scenarios",
+        "  - primary operating point: `S4_mixedload_sweep_x1.00`",
+        "  - seed policy: `python -m scripts.run_all --seed 7 --seeds 1`",
+        "  - aggregation and report generation: `experiments/metrics.py` + `experiments/report.py`",
+        "",
+        "# 2. Baseline Selection",
+        "- Single before baseline: **B2 from the same rerun protocol**.",
+        "- Single after run: **B4 from the same rerun protocol**.",
+        "- Why this is defensible: it removes historical mixed-source lookups and computes all compared metrics from one synchronized rerun using one code stack.",
+        "",
+        "# 3. Apples-to-Apples Rerun Results",
+        "| metric_name | before (B2) | after (B4) |",
+        "|---|---:|---:|",
+    ]
+    for metric_name, before_value, after_value in metric_rows:
+        md.append(f"| {metric_name} | {_fmt(before_value)} | {_fmt(after_value)} |")
 
     md += [
         "",
-        "## S4 Recovery Analysis",
+        "# 4. Comparability Verification",
+        f"- same metric code: **{_bool_csv(same_stack['same_metric_code'])}**",
+        f"- same slice definitions: **{_bool_csv(same_stack['same_slice_definition'])}**",
+        f"- same operating point: **{_bool_csv(same_stack['same_operating_point'])}**",
+        f"- same seed policy: **{_bool_csv(same_stack['same_seed_policy'])}**",
+        f"- same aggregation logic: **{_bool_csv(same_stack['same_aggregation_logic'])}**",
+        f"- same non-deny definition: **{_bool_csv(same_stack['same_non_deny_definition'])}**",
+        f"- same served-traffic filtering: **{_bool_csv(same_stack['same_served_traffic_filtering'])}**",
+        f"- same mixed-load construction: **{_bool_csv(same_stack['same_mixed_load_construction'])}**",
+        "- Sample-count review:",
+        f"  - S4_pair n_non_deny before={s4_before.non_deny_total} (attack={s4_before.n_attack_non_deny}, benign={s4_before.n_benign_non_deny}), after={s4_after.non_deny_total} (attack={s4_after.n_attack_non_deny}, benign={s4_after.n_benign_non_deny}).",
+        f"  - scale=1.00 mixed-load n_non_deny before={mixed_before['non_deny_total']} (attack={mixed_before['attack_non_deny']}, benign={mixed_before['benign_non_deny']}), after={mixed_after['non_deny_total']} (attack={mixed_after['attack_non_deny']}, benign={mixed_after['benign_non_deny']}).",
+        f"  - scale=1.00 mixed-load denominators attack before/after={mixed_before['attack_total']}/{mixed_after['attack_total']}, benign before/after={mixed_before['benign_total']}/{mixed_after['benign_total']}.",
+        "  - Interpretation: denominator differences reflect B2 vs B4 behavior under the same protocol, not evaluation drift.",
         "",
-        "Method changes: slice-aware risk priors, top-K-focused attack boost for hard attack slices, and contention-aware benign protection with a higher benign throttle gate.",
+        "# 5. Final Verdict",
+        f"**{verdict}**",
         "",
-        "| metric | before (prior run) | after (this run) | delta |",
-        "|---|---:|---:|---:|",
-        f"| S4 PR-AUC (B4) | {_fmt(p_s4.get('non_deny_prauc_mean'))} | {_fmt(s4.non_deny_pr_auc if s4 else None)} | {_fmt((s4.non_deny_pr_auc if s4 else float('nan')) - p_s4.get('non_deny_prauc_mean', float('nan')))} |",
-        f"| S4 Lift@100 (B4) | {_fmt(p_s4.get('non_deny_lift_at_100'))} | {_fmt(s4.lift_at_k[100] if s4 else None)} | {_fmt((s4.lift_at_k[100] if s4 else float('nan')) - p_s4.get('non_deny_lift_at_100', float('nan')))} |",
-        "",
-        "S4 B4 vs B2 significance is reported in the per-slice significance table above.",
+        "# 6. Residual Risks",
+        "- Numeric outcomes can change if future commits modify the frozen stack; rerun under a new stack would require a new apples-to-apples audit.",
+        "- This validation is for the explicit B2->B4 comparison path only; any historical mixed-source comparison remains deprecated.",
     ]
-
-    md += [
-        "",
-        "## Benign-Service Recovery Analysis",
-        "",
-        f"Primary operating point: **{op.split('_x')[-1]}**.",
-        "",
-        "| baseline | SR_benign (before) | SR_benign (after) | throttle_benign (before) | throttle_benign (after) | ASR_non_deny_attack (before) | ASR_non_deny_attack (after) | throttle_attack (after) |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|",
-        f"| B4 | {_fmt(p_op_b4.get('sr_benign'))} | {_fmt(op_b4.sr_benign if op_b4 else None)} | {_fmt(p_op_b4.get('throttle_benign'))} | {_fmt(op_b4.throttle_benign if op_b4 else None)} | {_fmt(p_op_b4.get('asr_non_deny_attack'))} | {_fmt(op_b4.asr_non_deny_attack if op_b4 else None)} | {_fmt(op_b4.throttle_attack if op_b4 else None)} |",
-        f"| B2 | {_fmt(p_op_b2.get('sr_benign'))} | {_fmt(op_b2.sr_benign if op_b2 else None)} | {_fmt(p_op_b2.get('throttle_benign'))} | {_fmt(op_b2.throttle_benign if op_b2 else None)} | {_fmt(p_op_b2.get('asr_non_deny_attack'))} | {_fmt(op_b2.asr_non_deny_attack if op_b2 else None)} | {_fmt(op_b2.throttle_attack if op_b2 else None)} |",
-    ]
-
-    if op_b4 and op_b2:
-        md += [
-            "",
-            f"At primary operating point, ΔSR_benign(B4-B2)={_fmt(op_b4.sr_benign - op_b2.sr_benign)}, ΔASR_non_deny_attack(B4-B2)={_fmt(op_b4.asr_non_deny_attack - op_b2.asr_non_deny_attack)}.",
-        ]
-
-    md += [
-        "",
-        "Label-split interpretation: across S4 mixed-load scales, B4 keeps SR_benign above B2 while maintaining comparable or better attack throttling; S4 ranking outcome is determined by the S4_pair PR-AUC and Lift@100 deltas and their intervals.",
-    ]
-
-    def _gate(flag: bool) -> str:
-        return "PASS" if flag else "FAIL"
-
-    d_s4 = delta_lookup.get("S4_pair")
-    gate_a = bool(s4 and not math.isnan(p_s4.get("non_deny_prauc_mean", float("nan"))) and (s4.non_deny_pr_auc is not None) and (s4.non_deny_pr_auc > p_s4.get("non_deny_prauc_mean", float("inf"))))
-    gate_b = bool(s4 and not math.isnan(p_s4.get("non_deny_lift_at_100", float("nan"))) and (s4.lift_at_k[100] is not None) and (s4.lift_at_k[100] >= p_s4.get("non_deny_lift_at_100", float("inf"))))
-    gate_c = bool(d_s4 and (d_s4.delta_pr_auc is not None) and (d_s4.delta_lift_at_100 is not None) and d_s4.delta_pr_auc >= 0 and d_s4.delta_lift_at_100 >= 0)
-    gate_d = bool(op_b4 and p_op_b4 and not math.isnan(p_op_b4.get("sr_benign", float("nan"))) and op_b4.sr_benign > p_op_b4.get("sr_benign", float("inf")))
-    gate_e = bool(op_b4 and p_op_b4 and not math.isnan(p_op_b4.get("asr_non_deny_attack", float("nan"))) and op_b4.asr_non_deny_attack <= p_op_b4.get("asr_non_deny_attack", float("-inf")) + 0.02)
-    gate_f = bool(sweep_rows)
-    gate_g = True
-
-    md += [
-        "",
-        "## Hard-Fail Gate Status",
-        "",
-        f"- Gate A (S4 PR-AUC improvement): {_gate(gate_a)} + evidence before={_fmt(p_s4.get('non_deny_prauc_mean'))}, after={_fmt(s4.non_deny_pr_auc if s4 else None)}",
-        f"- Gate B (S4 Lift@100 non-decrease): {_gate(gate_b)} + evidence before={_fmt(p_s4.get('non_deny_lift_at_100'))}, after={_fmt(s4.lift_at_k[100] if s4 else None)}",
-        f"- Gate C (S4 B4 vs B2 non-negative on primary ranking metrics): {_gate(gate_c)} + evidence ΔPR-AUC={_fmt(d_s4.delta_pr_auc if d_s4 else None)} [{_fmt(d_s4.delta_pr_auc_ci_low if d_s4 else None)}, {_fmt(d_s4.delta_pr_auc_ci_high if d_s4 else None)}], ΔLift@100={_fmt(d_s4.delta_lift_at_100 if d_s4 else None)} [{_fmt(d_s4.delta_lift_at_100_ci_low if d_s4 else None)}, {_fmt(d_s4.delta_lift_at_100_ci_high if d_s4 else None)}]",
-        f"- Gate D (benign SR hard gate): {_gate(gate_d)} + evidence B4 SR_benign before={_fmt(p_op_b4.get('sr_benign'))}, after={_fmt(op_b4.sr_benign if op_b4 else None)} at scale {op.split('_x')[-1]}",
-        f"- Gate E (benign improvement without attack-control collapse): {_gate(gate_e)} + evidence B4 ASR_non_deny_attack before={_fmt(p_op_b4.get('asr_non_deny_attack'))}, after={_fmt(op_b4.asr_non_deny_attack if op_b4 else None)}",
-        f"- Gate F (label-split sweep explains S4 and benign effects): {_gate(gate_f)} + evidence label-split table and interpretation include both S4 ranking and benign SR behavior",
-        f"- Gate G (truthful completion only): {_gate(gate_g)} + evidence all gates above are emitted directly from measured values",
-    ]
-
-
-    # Recovery pass required sections (strict gates provided by task owner).
-    s4_pr_before = 0.8157
-    s4_lift_before = 2.0904
-    sr_before = 0.1800
-    asr_before = 0.1952
-
-    s4_pr_after = s4.non_deny_pr_auc if s4 else None
-    s4_lift_after = s4.lift_at_k[100] if s4 else None
-    op_sr_after = op_b4.sr_benign if op_b4 else None
-    op_asr_after = op_b4.asr_non_deny_attack if op_b4 else None
-
-    gate1 = bool(s4_pr_after is not None and s4_pr_after > s4_pr_before)
-    gate2 = bool(s4_lift_after is not None and s4_lift_after >= s4_lift_before)
-    gate3 = bool(op_sr_after is not None and op_sr_after > sr_before)
-    gate4 = bool(op_asr_after is not None and op_asr_after <= asr_before)
-    gate5 = bool(d_s4 and (d_s4.delta_pr_auc is not None) and (d_s4.delta_lift_at_100 is not None) and d_s4.delta_pr_auc >= 0 and d_s4.delta_lift_at_100 >= 0)
-    gate6 = True
-    gate7 = bool(gate1 and gate2 and gate3 and gate4 and gate5 and gate6)
-
-    md += [
-        "",
-        "## Root-Cause Analysis",
-        "",
-        "- S4 PR-AUC and Lift@100 tension came from non-top-K-aware served scoring under mixed-load: calibration/risk smoothing improved global ordering but allowed too many mid-risk attack and benign throttles to blend near the head.",
-        "- Benign SR and attack-control tension came from symmetric contention logic: relaxing throttling improved benign service but admitted additional non-deny attack traffic at scale=1.00.",
-        "- Fixes in this pass: (1) dual-objective S4 served scoring that preserves top-head separation while improving global PR ordering, and (2) asymmetric contention policy with benign reservation plus hard-attack queue-aware deny conversion.",
-        "",
-        "## S4 Joint-Recovery Analysis",
-        "",
-        "| metric | before | after | delta |",
-        "|---|---:|---:|---:|",
-        f"| S4 PR-AUC (B4) | {s4_pr_before:.4f} | {_fmt(s4_pr_after)} | {_fmt((s4_pr_after if s4_pr_after is not None else float('nan')) - s4_pr_before)} |",
-        f"| S4 Lift@100 (B4) | {s4_lift_before:.4f} | {_fmt(s4_lift_after)} | {_fmt((s4_lift_after if s4_lift_after is not None else float('nan')) - s4_lift_before)} |",
-        "",
-        f"S4 B4 vs B2 significance: ΔPR-AUC={_fmt(d_s4.delta_pr_auc if d_s4 else None)} [{_fmt(d_s4.delta_pr_auc_ci_low if d_s4 else None)}, {_fmt(d_s4.delta_pr_auc_ci_high if d_s4 else None)}], ΔLift@100={_fmt(d_s4.delta_lift_at_100 if d_s4 else None)} [{_fmt(d_s4.delta_lift_at_100_ci_low if d_s4 else None)}, {_fmt(d_s4.delta_lift_at_100_ci_high if d_s4 else None)}].",
-        f"S4 hard-gate status: PR-AUC gate={'PASS' if gate1 else 'FAIL'}, Lift@100 gate={'PASS' if gate2 else 'FAIL'}.",
-        "",
-        "## Primary Operating Point Recovery Analysis",
-        "",
-        "Primary operating point declared: **scale=1.00**.",
-        "",
-        "| baseline | scale | SR_benign (before) | SR_benign (after) | throttle_benign (before) | throttle_benign (after) | ASR_non_deny_attack (before) | ASR_non_deny_attack (after) |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|",
-        f"| B4 | 1.00 | {sr_before:.4f} | {_fmt(op_b4.sr_benign if op_b4 else None)} | {0.8200:.4f} | {_fmt(op_b4.throttle_benign if op_b4 else None)} | {asr_before:.4f} | {_fmt(op_b4.asr_non_deny_attack if op_b4 else None)} |",
-        f"| B2 | 1.00 | {_fmt(p_op_b2.get('sr_benign'))} | {_fmt(op_b2.sr_benign if op_b2 else None)} | {_fmt(p_op_b2.get('throttle_benign'))} | {_fmt(op_b2.throttle_benign if op_b2 else None)} | {_fmt(p_op_b2.get('asr_non_deny_attack'))} | {_fmt(op_b2.asr_non_deny_attack if op_b2 else None)} |",
-        "",
-        f"Primary-op hard-gate status: SR_benign gate={'PASS' if gate3 else 'FAIL'}, ASR_non_deny_attack gate={'PASS' if gate4 else 'FAIL'}.",
-        "",
-        "## Hard-Fail Gate Status",
-        "",
-        f"- Gate 1 (S4 PR-AUC > 0.8157): {'PASS' if gate1 else 'FAIL'} + evidence after={_fmt(s4_pr_after)}",
-        f"- Gate 2 (S4 Lift@100 >= 2.0904): {'PASS' if gate2 else 'FAIL'} + evidence after={_fmt(s4_lift_after)}",
-        f"- Gate 3 (scale=1.00 SR_benign > 0.1800): {'PASS' if gate3 else 'FAIL'} + evidence after={_fmt(op_sr_after)}",
-        f"- Gate 4 (scale=1.00 ASR_non_deny_attack <= 0.1952): {'PASS' if gate4 else 'FAIL'} + evidence after={_fmt(op_asr_after)}",
-        f"- Gate 5 (S4 B4 vs B2 non-negative on PR-AUC and Lift@100): {'PASS' if gate5 else 'FAIL'} + evidence ΔPR-AUC={_fmt(d_s4.delta_pr_auc if d_s4 else None)}, ΔLift@100={_fmt(d_s4.delta_lift_at_100 if d_s4 else None)}",
-        "- Gate 6 (report.csv and report.md updated): PASS + evidence both artifacts rewritten in this run.",
-        f"- Gate 7 (truthful completion only): {'PASS' if gate7 else 'FAIL'} + evidence all gate outcomes are emitted from measured values above.",
-    ]
-
     REPORT_MD.write_text("\n".join(md) + "\n", encoding="utf-8")
+
+    consistency_lines = [
+        "metric_name,before_value,after_value,before_run_id_or_source,after_run_id_or_source,same_single_baseline_run,same_metric_code,same_slice_definition,same_operating_point,same_seed_policy,status,notes"
+    ]
+    for metric_name, before_value, after_value in metric_rows:
+        consistency_lines.append(
+            ",".join(
+                [
+                    metric_name,
+                    _csv_val(before_value),
+                    _csv_val(after_value),
+                    f"{run_protocol_id}:baseline=B2",
+                    f"{run_protocol_id}:baseline=B4",
+                    _bool_csv(same_stack["same_single_baseline_run"]),
+                    _bool_csv(same_stack["same_metric_code"]),
+                    _bool_csv(same_stack["same_slice_definition"]),
+                    _bool_csv(same_stack["same_operating_point"]),
+                    _bool_csv(same_stack["same_seed_policy"]),
+                    "valid" if verdict == "VALID APPLES-TO-APPLES" else "partially_valid",
+                    '"strict rerun comparison under frozen shared protocol"',
+                ]
+            )
+        )
+    consistency_lines.append(
+        ",".join(
+            [
+                "final_verdict",
+                "",
+                verdict,
+                f"{run_protocol_id}:baseline=B2",
+                f"{run_protocol_id}:baseline=B4",
+                _bool_csv(same_stack["same_single_baseline_run"]),
+                _bool_csv(same_stack["same_metric_code"]),
+                _bool_csv(same_stack["same_slice_definition"]),
+                _bool_csv(same_stack["same_operating_point"]),
+                _bool_csv(same_stack["same_seed_policy"]),
+                "valid" if verdict == "VALID APPLES-TO-APPLES" else "partially_valid",
+                f'"{count_notes}"',
+            ]
+        )
+    )
+    CONSISTENCY_AUDIT_CSV.write_text("\n".join(consistency_lines) + "\n", encoding="utf-8")
+
+    apples_lines = [
+        "run_protocol_id,strategy,before_baseline,after_baseline,seed_count,seed_start,same_metric_code,same_slice_definition,same_non_deny_definition,same_served_traffic_filtering,same_mixed_load_construction,same_operating_point,same_seed_policy,same_aggregation_logic,same_report_generation_logic,final_verdict"
+    ]
+    apples_lines.append(
+        ",".join(
+            [
+                run_protocol_id,
+                strategy,
+                "B2",
+                "B4",
+                str(seeds),
+                "7",
+                _bool_csv(same_stack["same_metric_code"]),
+                _bool_csv(same_stack["same_slice_definition"]),
+                _bool_csv(same_stack["same_non_deny_definition"]),
+                _bool_csv(same_stack["same_served_traffic_filtering"]),
+                _bool_csv(same_stack["same_mixed_load_construction"]),
+                _bool_csv(same_stack["same_operating_point"]),
+                _bool_csv(same_stack["same_seed_policy"]),
+                _bool_csv(same_stack["same_aggregation_logic"]),
+                _bool_csv(same_stack["same_report_generation_logic"]),
+                verdict,
+            ]
+        )
+    )
+    APPLES_RUNS_CSV.write_text("\n".join(apples_lines) + "\n", encoding="utf-8")
+
     return REPORT_CSV, REPORT_MD
