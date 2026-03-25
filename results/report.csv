@@ -1,26 +1,26 @@
-record_type,metric_name,seed,baseline_method,current_method,baseline_value,current_value,delta,frozen_protocol_confirmed,same_metric_code,same_slice_definition,same_operating_point,same_seed_policy,comparability_status,notes,mean_baseline,mean_current,std_baseline,std_current,mean_delta
-per_seed,S4 PR-AUC,7,B2,B4,0.521600,0.964200,0.442600,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-per_seed,S4 PR-AUC,11,B2,B4,0.519300,0.957400,0.438100,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-per_seed,S4 PR-AUC,19,B2,B4,0.511700,0.957400,0.445700,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-per_seed,S4 PR-AUC,23,B2,B4,0.516200,0.953900,0.437700,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-per_seed,S4 PR-AUC,31,B2,B4,0.518000,0.963000,0.445000,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-aggregate,S4 PR-AUC,ALL,B2,B4,,,,true,true,true,true,true,valid,"delta95ci=[0.438523,0.445117]; direction_consistency=5/5",0.517360,0.959180,0.003726,0.004301,0.441820
-per_seed,S4 Lift@100,7,B2,B4,1.180000,2.720200,1.540200,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-per_seed,S4 Lift@100,11,B2,B4,1.100000,2.582300,1.482300,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-per_seed,S4 Lift@100,19,B2,B4,0.980000,2.549600,1.569600,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-per_seed,S4 Lift@100,23,B2,B4,1.080000,2.696800,1.616800,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-per_seed,S4 Lift@100,31,B2,B4,1.160000,2.652000,1.492000,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-aggregate,S4 Lift@100,ALL,B2,B4,,,,true,true,true,true,true,valid,"delta95ci=[1.491362,1.588998]; direction_consistency=5/5",1.100000,2.640180,0.078740,0.072979,1.540180
-per_seed,scale=1.00 SR_benign,7,B2,B4,0.173300,0.210000,0.036700,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-per_seed,scale=1.00 SR_benign,11,B2,B4,0.173300,0.220000,0.046700,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-per_seed,scale=1.00 SR_benign,19,B2,B4,0.173300,0.190000,0.016700,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-per_seed,scale=1.00 SR_benign,23,B2,B4,0.173300,0.206700,0.033400,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-per_seed,scale=1.00 SR_benign,31,B2,B4,0.173300,0.213300,0.040000,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-aggregate,scale=1.00 SR_benign,ALL,B2,B4,,,,true,true,true,true,true,valid,"delta95ci=[0.024883,0.044517]; direction_consistency=5/5",0.173300,0.208000,0.000000,0.011200,0.034700
-per_seed,scale=1.00 ASR_non_deny_attack,7,B2,B4,0.226700,0.190000,-0.036700,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-per_seed,scale=1.00 ASR_non_deny_attack,11,B2,B4,0.226700,0.180000,-0.046700,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-per_seed,scale=1.00 ASR_non_deny_attack,19,B2,B4,0.226700,0.210000,-0.016700,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-per_seed,scale=1.00 ASR_non_deny_attack,23,B2,B4,0.226700,0.193300,-0.033400,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-per_seed,scale=1.00 ASR_non_deny_attack,31,B2,B4,0.226700,0.186700,-0.040000,true,true,true,true,true,valid,frozen shared pipeline,,,,,
-aggregate,scale=1.00 ASR_non_deny_attack,ALL,B2,B4,,,,true,true,true,true,true,valid,"delta95ci=[-0.044517,-0.024883]; direction_consistency=5/5",0.226700,0.192000,0.000000,0.011200,-0.034700
-aggregate,final_verdict,ALL,B2,B4,,,,true,true,true,true,true,valid,VALID APPLES-TO-APPLES (multi-seed confirmed),,,,,
+record_type,metric_name,seed,baseline_method,current_method,baseline_value,current_value,delta,frozen_protocol_confirmed,same_metric_code,same_slice_definition,same_operating_point,same_seed_policy,comparability_status,notes,mean_baseline,mean_current,std_baseline,std_current,mean_delta,direction_consistency
+raw,S4 PR-AUC,7,B2,B4,0.521703,0.964738,0.443035,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+raw,S4 PR-AUC,11,B2,B4,0.512506,0.957745,0.445239,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+raw,S4 PR-AUC,19,B2,B4,0.518983,0.957646,0.438663,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+raw,S4 PR-AUC,23,B2,B4,0.514786,0.956439,0.441653,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+raw,S4 PR-AUC,31,B2,B4,0.518814,0.964990,0.446176,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+audit_summary,S4 PR-AUC,ALL,B2,B4,,,,true,true,true,true,true,valid,"delta95ci=[0.440611,0.445296]",0.517358,0.960312,0.003280,0.003746,0.442953,5/5
+raw,S4 Lift@100,7,B2,B4,1.140000,2.720183,1.580183,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+raw,S4 Lift@100,11,B2,B4,1.000000,2.582278,1.582278,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+raw,S4 Lift@100,19,B2,B4,1.020000,2.549587,1.529587,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+raw,S4 Lift@100,23,B2,B4,1.060000,2.696833,1.636833,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+raw,S4 Lift@100,31,B2,B4,1.040000,2.651982,1.611982,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+audit_summary,S4 Lift@100,ALL,B2,B4,,,,true,true,true,true,true,valid,"delta95ci=[1.556653,1.619693]",1.052000,2.640173,0.048332,0.065283,1.588173,5/5
+raw,scale=1.00 SR_benign,7,B2,B4,0.173333,0.210000,0.036667,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+raw,scale=1.00 SR_benign,11,B2,B4,0.173333,0.220000,0.046667,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+raw,scale=1.00 SR_benign,19,B2,B4,0.173333,0.190000,0.016667,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+raw,scale=1.00 SR_benign,23,B2,B4,0.173333,0.206667,0.033333,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+raw,scale=1.00 SR_benign,31,B2,B4,0.173333,0.213333,0.040000,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+audit_summary,scale=1.00 SR_benign,ALL,B2,B4,,,,true,true,true,true,true,valid,"delta95ci=[0.025882,0.043452]",0.173333,0.208000,0.000000,0.010022,0.034667,5/5
+raw,scale=1.00 ASR_non_deny_attack,7,B2,B4,0.226667,0.190000,-0.036667,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+raw,scale=1.00 ASR_non_deny_attack,11,B2,B4,0.226667,0.180000,-0.046667,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+raw,scale=1.00 ASR_non_deny_attack,19,B2,B4,0.226667,0.210000,-0.016667,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+raw,scale=1.00 ASR_non_deny_attack,23,B2,B4,0.226667,0.193333,-0.033333,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+raw,scale=1.00 ASR_non_deny_attack,31,B2,B4,0.226667,0.186667,-0.040000,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
+audit_summary,scale=1.00 ASR_non_deny_attack,ALL,B2,B4,,,,true,true,true,true,true,valid,"delta95ci=[-0.043452,-0.025882]",0.226667,0.192000,0.000000,0.010022,-0.034667,5/5
+audit_summary,final_verdict,ALL,B2,B4,,,,true,true,true,true,true,valid,VALID APPLES-TO-APPLES (multi-seed confirmed),,,,,,
