@@ -1,6 +1,6 @@
-metric_name,multi_seed_valid_under_frozen_rerun,direction_consistent_across_seeds,variability_caveat,notes
-S4 PR-AUC,true,true,none,wins=5/5; mean_delta=0.441820; std_delta=0.003761
-S4 Lift@100,true,true,none,wins=5/5; mean_delta=1.540180; std_delta=0.055695
-scale=1.00 SR_benign,true,true,none,wins=5/5; mean_delta=0.034700; std_delta=0.011200
-scale=1.00 ASR_non_deny_attack,true,true,none,wins=5/5; mean_delta=-0.034700; std_delta=0.011200
-final_verdict,true,,see metric rows,VALID APPLES-TO-APPLES (multi-seed confirmed)
+metric_name,final_comparability_status,multi_seed_direction_favorable,variance_weakens_confidence,final_notes
+S4 PR-AUC,valid,true,none,wins=5/5; mean_delta=0.442953; std_delta=0.002672
+S4 Lift@100,valid,true,none,wins=5/5; mean_delta=1.588173; std_delta=0.035960
+scale=1.00 SR_benign,valid,true,none,wins=5/5; mean_delta=0.034667; std_delta=0.010022
+scale=1.00 ASR_non_deny_attack,valid,true,none,wins=5/5; mean_delta=-0.034667; std_delta=0.010022
+final_verdict,valid,,see metric rows,VALID APPLES-TO-APPLES (multi-seed confirmed)
