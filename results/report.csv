@@ -23,4 +23,9 @@ raw,scale=1.00 ASR_non_deny_attack,19,B2,B4,0.226667,0.210000,-0.016667,true,tru
 raw,scale=1.00 ASR_non_deny_attack,23,B2,B4,0.226667,0.193333,-0.033333,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
 raw,scale=1.00 ASR_non_deny_attack,31,B2,B4,0.226667,0.186667,-0.040000,true,true,true,true,true,valid,frozen shared multi-seed rerun,,,,,,
 audit_summary,scale=1.00 ASR_non_deny_attack,ALL,B2,B4,,,,true,true,true,true,true,valid,"delta95ci=[-0.043452,-0.025882]",0.226667,0.192000,0.000000,0.010022,-0.034667,5/5
+audit_summary,method_component_A_context_bound_dynamic_credentials,ALL,B2,B4,,,,true,true,true,true,true,valid,"exchange token binds jkt+context hash; runtime mismatch checks constrain credential reuse",,,,,,
+audit_summary,method_component_B_risk_driven_multi_action_control,ALL,B2,B4,,,,true,true,true,true,true,valid,"runtime decision space is allow/throttle/deny with risk+pressure gating",,,,,,
+audit_summary,method_component_C_unified_comparable_protocol,ALL,B2,B4,,,,true,true,true,true,true,valid,"frozen stack + shared seeds + fixed B2->B4 comparator enable apples-to-apples attribution",,,,,,
+audit_summary,experiment_role_S4_mixed_load,ALL,B2,B4,,,,true,true,true,true,true,valid,"S4 mixed-load slice is the primary stress test for ranking and service-security balance",,,,,,
+audit_summary,interpretation_note_balance,ALL,B2,B4,,,,true,true,true,true,true,valid,"at scale=1.00 B4 raises SR_benign and lowers ASR_non_deny_attack, consistent with graded control",,,,,,
 audit_summary,final_verdict,ALL,B2,B4,,,,true,true,true,true,true,valid,VALID APPLES-TO-APPLES (multi-seed confirmed),,,,,,
