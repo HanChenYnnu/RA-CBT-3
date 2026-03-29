@@ -10,7 +10,7 @@ from pathlib import Path
 from baselines.B4_full.calibrate_quantiles import calibrate
 from experiments.expected_deltas import assert_budget_sweep_gates, assert_defensibility_gates, assert_required_security_deltas
 from experiments.metrics import compute_b4_risk_evaluation, compute_b4_risk_summary, compute_b4_vs_b2_served_deltas, compute_decision_latency_stats, compute_metrics, compute_served_slices_for_baseline
-from experiments.budget_sweep import run_b2_budget_sweep, run_b4_budget_sweep
+from experiments.budget_sweep import run_b2_budget_sweep, run_b4_ablation_s4_scale1, run_b4_budget_sweep
 from experiments.plots import generate_plots
 from experiments.report import write_report
 from experiments.runner import ensure_coverage, planned_baselines, run_b4_calibration_phase, run_selected
@@ -94,6 +94,14 @@ def main() -> None:
             events.extend(run_b2_budget_sweep(out_dir=out_dir, seed=seed))
         if "B4" in baselines:
             events.extend(run_b4_budget_sweep(out_dir=out_dir, seed=seed))
+        if "B4_no_ctx" in baselines:
+            events.extend(run_b4_ablation_s4_scale1(out_dir=out_dir, seed=seed, baseline_label="B4_no_ctx", disable_ctx_binding=True, disable_multi_action=False, weak_signals=False, simple_policy=False))
+        if "B4_no_multi" in baselines:
+            events.extend(run_b4_ablation_s4_scale1(out_dir=out_dir, seed=seed, baseline_label="B4_no_multi", disable_ctx_binding=False, disable_multi_action=True, weak_signals=False, simple_policy=False))
+        if "B4_weak_signals" in baselines:
+            events.extend(run_b4_ablation_s4_scale1(out_dir=out_dir, seed=seed, baseline_label="B4_weak_signals", disable_ctx_binding=False, disable_multi_action=False, weak_signals=True, simple_policy=False))
+        if "B4_simple_policy" in baselines:
+            events.extend(run_b4_ablation_s4_scale1(out_dir=out_dir, seed=seed, baseline_label="B4_simple_policy", disable_ctx_binding=False, disable_multi_action=False, weak_signals=False, simple_policy=True))
 
     validate_from_audit_file()
     validate_served_traffic_preflight(events)

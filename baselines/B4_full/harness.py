@@ -61,7 +61,37 @@ def run_b4_calibration(*, n: int, benign_log_path: Path, attack_log_path: Path, 
 
 
 def run_b4_scenario(*, scenario: str, n: int, log_path: Path, seed: int) -> list[EventRow]:
+    return run_b4_variant_scenario(
+        scenario=scenario,
+        n=n,
+        log_path=log_path,
+        seed=seed,
+        baseline_label="B4",
+        disable_ctx_binding=False,
+        disable_multi_action=False,
+        weak_signals=False,
+        simple_policy=False,
+    )
+
+
+def run_b4_variant_scenario(
+    *,
+    scenario: str,
+    n: int,
+    log_path: Path,
+    seed: int,
+    baseline_label: str,
+    disable_ctx_binding: bool,
+    disable_multi_action: bool,
+    weak_signals: bool,
+    simple_policy: bool,
+) -> list[EventRow]:
     os.environ["LOG_PATH"] = str(log_path)
+    os.environ["BASELINE_LABEL"] = baseline_label
+    os.environ["B4_DISABLE_CTX_BINDING"] = "1" if disable_ctx_binding else "0"
+    os.environ["B4_DISABLE_MULTI_ACTION"] = "1" if disable_multi_action else "0"
+    os.environ["B4_WEAK_SIGNALS"] = "1" if weak_signals else "0"
+    os.environ["B4_SIMPLE_POLICY"] = "1" if simple_policy else "0"
     app = create_app()
     manifest = scenario_manifest(scenario=scenario, baseline="B4", seed=seed, n=n)
 
@@ -138,4 +168,10 @@ def run_b4_scenario(*, scenario: str, n: int, log_path: Path, seed: int) -> list
                 record_sample(scenario=scenario, baseline="B4", caps=manifest, auth_present=True, dpop_present=True, dpop_valid=True, exchange_called=True, replay_key="", asn="AS100", country="US", ua_family="browser", max_tokens=int(req.get("max_tokens", 0)))
                 client.post("/v1/chat/completions", json=req, headers=headers)
 
-    return read_events_from_log(log_path=log_path, scenario=scenario, seed=seed)
+    events = read_events_from_log(log_path=log_path, scenario=scenario, seed=seed)
+    os.environ.pop("BASELINE_LABEL", None)
+    os.environ.pop("B4_DISABLE_CTX_BINDING", None)
+    os.environ.pop("B4_DISABLE_MULTI_ACTION", None)
+    os.environ.pop("B4_WEAK_SIGNALS", None)
+    os.environ.pop("B4_SIMPLE_POLICY", None)
+    return events

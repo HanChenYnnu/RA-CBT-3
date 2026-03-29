@@ -9,14 +9,14 @@ from baselines.B0_static.harness import run_b0_scenario
 from baselines.B1_ip_allowlist.harness import run_b1_scenario
 from baselines.B2_bearer_short.harness import run_b2_scenario
 from baselines.B3_pop_only.harness import run_b3_scenario
-from baselines.B4_full.harness import run_b4_calibration, run_b4_scenario
+from baselines.B4_full.harness import run_b4_calibration, run_b4_scenario, run_b4_variant_scenario
 from experiments.preflight import validate_contracts_declared
 from experiments.scenarios import ALL_SCENARIOS, SCENARIOS
 from experiments.types import EventRow
 
 
 def planned_baselines() -> list[str]:
-    return ["B0", "B1", "B2", "B3", "B4"]
+    return ["B0", "B1", "B2", "B3", "B4", "B4_no_ctx", "B4_no_multi", "B4_weak_signals", "B4_simple_policy"]
 
 
 def ensure_coverage(rows: list[object], baselines: list[str], scenarios: list[str]) -> None:
@@ -62,6 +62,14 @@ def run_selected(*, baselines: list[str], scenarios: list[str], out_dir: Path, s
                 events.extend(run_b3_scenario(scenario=scenario, n=n, log_path=log_path, seed=seed))
             elif baseline == "B4":
                 events.extend(run_b4_scenario(scenario=scenario, n=n, log_path=log_path, seed=seed))
+            elif baseline == "B4_no_ctx":
+                events.extend(run_b4_variant_scenario(scenario=scenario, n=n, log_path=log_path, seed=seed, baseline_label="B4_no_ctx", disable_ctx_binding=True, disable_multi_action=False, weak_signals=False, simple_policy=False))
+            elif baseline == "B4_no_multi":
+                events.extend(run_b4_variant_scenario(scenario=scenario, n=n, log_path=log_path, seed=seed, baseline_label="B4_no_multi", disable_ctx_binding=False, disable_multi_action=True, weak_signals=False, simple_policy=False))
+            elif baseline == "B4_weak_signals":
+                events.extend(run_b4_variant_scenario(scenario=scenario, n=n, log_path=log_path, seed=seed, baseline_label="B4_weak_signals", disable_ctx_binding=False, disable_multi_action=False, weak_signals=True, simple_policy=False))
+            elif baseline == "B4_simple_policy":
+                events.extend(run_b4_variant_scenario(scenario=scenario, n=n, log_path=log_path, seed=seed, baseline_label="B4_simple_policy", disable_ctx_binding=False, disable_multi_action=False, weak_signals=False, simple_policy=True))
 
     return events
 

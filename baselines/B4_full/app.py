@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from baselines.B3_pop_only.app import dpop_sign
+from baselines.B4_full.policy import AuthorizationState, ControlAction, PolicyThresholds, decide_action
 from experiments.latency import deterministic_reject_work, latency_ms_with_jitter
 from experiments.mock_upstream import chat_completion
 from fastapi import FastAPI
@@ -301,6 +302,11 @@ def create_app() -> FastAPI:
         rpm_limit=int(os.environ.get("B4_RPM_LIMIT", "120")),
         tpm_limit=int(os.environ.get("B4_TPM_LIMIT", "8000")),
     )
+    baseline_label = os.environ.get("BASELINE_LABEL", "B4")
+    disable_ctx_binding = os.environ.get("B4_DISABLE_CTX_BINDING", "0") == "1"
+    disable_multi_action = os.environ.get("B4_DISABLE_MULTI_ACTION", "0") == "1"
+    weak_signals = os.environ.get("B4_WEAK_SIGNALS", "0") == "1"
+    simple_policy = os.environ.get("B4_SIMPLE_POLICY", "0") == "1"
 
     @app.post("/auth/exchange")
     def auth_exchange(payload: dict[str, Any]) -> dict[str, Any]:
@@ -357,7 +363,7 @@ def create_app() -> FastAPI:
             _append_log(
                 {
                     "ts_ms": int(time.time() * 1000),
-                    "baseline": "B4",
+                    "baseline": baseline_label,
                     "scenario": scenario,
                     "request_id": request_id,
                     "status_code": status,
@@ -390,6 +396,10 @@ def create_app() -> FastAPI:
         replay_pressure = sum(recent_dpop_failures[-50:]) / max(1, len(recent_dpop_failures[-50:]))
         exchange_anomaly = _exchange_risk(profile, req_ctx)
         ctx_drift = _ctx_drift_score(issue_ctx, req_ctx) if issue_ctx else 1.0
+        if weak_signals:
+            exchange_anomaly *= 0.35
+            ctx_drift *= 0.35
+            replay_pressure *= 0.40
 
         drift_weight = 0.60 if budget_pressure <= 0.30 else 1.10
         z = -2.30 + drift_weight * ctx_drift + 1.05 * replay_pressure + 1.45 * budget_pressure + 1.60 * exchange_anomaly
@@ -443,11 +453,11 @@ def create_app() -> FastAPI:
             return log_and_return(401, "deny", dpop_reason, 0, 0, -1, -1, max(decision_risk, 0.70 + abs(_risk_jitter(seed, request_id))*6), {"error": dpop_reason})
         recent_dpop_failures.append(0)
 
-        if issue_ctx is None:
+        if issue_ctx is None and not disable_ctx_binding:
             return log_and_return(401, "deny", "ctx_mismatch", 0, 0, -1, -1, max(decision_risk, 0.68 + abs(_risk_jitter(seed, request_id))*6), {"error": "ctx_mismatch"})
-        expected_hash_ok = _ctx_hash(issue_ctx) == expected_ctx_hash
-        severe_ctx_mismatch = issue_ctx.country != req_ctx.country or issue_ctx.asn != req_ctx.asn
-        if (not expected_hash_ok) and severe_ctx_mismatch:
+        expected_hash_ok = _ctx_hash(issue_ctx) == expected_ctx_hash if issue_ctx else True
+        severe_ctx_mismatch = bool(issue_ctx and (issue_ctx.country != req_ctx.country or issue_ctx.asn != req_ctx.asn))
+        if (not disable_ctx_binding) and (not expected_hash_ok) and severe_ctx_mismatch:
             return log_and_return(401, "deny", "ctx_mismatch", 0, 0, -1, -1, max(decision_risk, 0.68 + abs(_risk_jitter(seed, request_id))*6), {"error": "ctx_mismatch"})
 
         precharge_tokens_requested = int(payload.get("max_tokens", 64))
@@ -488,6 +498,30 @@ def create_app() -> FastAPI:
         precharge_tokens = precharge_tokens_requested
         tighten = 0.0
         decision = "allow"
+        if simple_policy:
+            base_decision = decide_action(
+                AuthorizationState(
+                    credential_valid=True,
+                    context_consistent=expected_hash_ok or disable_ctx_binding,
+                    hard_violation=False,
+                    risk_score=decision_risk,
+                    contention=pressure,
+                    restricted_credential=restricted,
+                ),
+                PolicyThresholds(
+                    tau_allow=thresholds["tau_allow"],
+                    tau_deny=thresholds["tau_deny"],
+                    contention_throttle=0.50,
+                    contention_deny=0.90,
+                ),
+            )
+            if base_decision is ControlAction.DENY:
+                recent_throttles.append(1)
+                return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), decision_risk, {"error": "risk_deny"})
+            if base_decision is ControlAction.THROTTLE:
+                decision = "throttle"
+                precharge_tokens = max(4, int(precharge_tokens * 0.6))
+                tighten = 0.45
 
         risk_allow_gate = thresholds["tau_allow"] + (0.18 if scenario == "S5_slowdrip" else 0.0)
         if scenario == "S6_drift":
@@ -514,7 +548,7 @@ def create_app() -> FastAPI:
                 decision = "allow"
                 precharge_tokens = precharge_tokens_requested
                 tighten = 0.0
-        if pressure >= p3 or decision_risk >= thresholds["tau_deny"]:
+        if (not simple_policy) and (pressure >= p3 or decision_risk >= thresholds["tau_deny"]):
             if scenario in {"S1_restricted_issuance_hard", "S2_delegated_misuse_hard", "S3_replay_blended_hard"} and risk < min(0.95, thresholds["tau_deny"] + 0.15):
                 decision = "throttle"
                 precharge_tokens = max(4, int(precharge_tokens * 0.35))
@@ -522,11 +556,11 @@ def create_app() -> FastAPI:
             else:
                 recent_throttles.append(1)
                 return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), decision_risk, {"error": "risk_deny"})
-        if pressure >= p2:
+        if (not simple_policy) and pressure >= p2:
             decision = "throttle"
             precharge_tokens = max(4, int(precharge_tokens * 0.4))
             tighten = 0.70
-        elif pressure >= p1 or restricted or decision_risk >= risk_allow_gate:
+        elif (not simple_policy) and (pressure >= p1 or restricted or decision_risk >= risk_allow_gate):
             decision = "throttle"
             precharge_tokens = max(4, int(precharge_tokens * 0.7))
             tighten = 0.35
@@ -572,6 +606,10 @@ def create_app() -> FastAPI:
                 recent_throttles.append(1)
                 return log_and_return(403, "deny", "risk_deny", 0, precharge_tokens, int(tpm_pressure * budgets.tpm_limit), int(tpm_pressure * budgets.tpm_limit), max(decision_risk, 0.22), {"error": "risk_deny"})
 
+        if disable_multi_action and decision == "throttle":
+            decision = "allow"
+            precharge_tokens = precharge_tokens_requested
+            tighten = 0.0
         applied_throttle = decision == "throttle"
         recent_throttles.append(1 if applied_throttle else 0)
 

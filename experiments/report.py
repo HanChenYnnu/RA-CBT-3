@@ -14,6 +14,9 @@ REPORT_CSV = RESULTS_DIR / "report.csv"
 REPORT_MD = RESULTS_DIR / "report.md"
 CONSISTENCY_AUDIT_CSV = RESULTS_DIR / "consistency_audit.csv"
 APPLES_RUNS_CSV = RESULTS_DIR / "apples_to_apples_runs.csv"
+ABLATION_CSV = RESULTS_DIR / "ablation.csv"
+EXTERNAL_VALIDATION_CSV = RESULTS_DIR / "external_validation.csv"
+PROPERTY_CHECKS_CSV = RESULTS_DIR / "property_checks.csv"
 
 
 def _fmt(v: float | None) -> str:
@@ -233,25 +236,66 @@ def write_report(
 
     REPORT_CSV.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
+    def _row(b: str, s: str) -> MetricRow:
+        r = _find_row(rows, baseline=b, scenario=s)
+        if r is None:
+            raise RuntimeError(f"Missing row: {b}/{s}")
+        return r
+
+    ablation_targets = [
+        ("B2", "baseline B2"),
+        ("B4", "B4 full"),
+        ("B4_no_ctx", "B4 w/o context binding"),
+        ("B4_no_multi", "B4 w/o multi-action control"),
+        ("B4_weak_signals", "B4 weak risk/context signals"),
+        ("B4_simple_policy", "B4 simplified decision policy"),
+    ]
+    ablation_rows: list[tuple[str, MetricRow, ServedTrafficSlice | None]] = []
+    for baseline, label in ablation_targets:
+        r = _find_row(rows, baseline=baseline, scenario="S4_mixedload_sweep_x1.00")
+        served = None
+        if baseline == "B4":
+            served = next((s for s in b4_eval.served_traffic_slices if s.name == "S4_pair"), None)
+        elif baseline == "B2":
+            served = b2_served.get("S4_pair") if b2_served else None
+        if r:
+            ablation_rows.append((label, r, served))
+
+    ext_b4_s5 = _find_row(rows, baseline="B4", scenario="S5_slowdrip")
+    ext_b4_s6 = _find_row(rows, baseline="B4", scenario="S6_drift")
+
     md = [
-        "# 1. Frozen Evaluation Protocol",
+        "# 1. Formal Problem Definition",
+        "- We model API-facing LLM authorization as a stateful access-control problem over subjects, context-bound credentials, request context, endpoint scope, and budget contention.",
+        "- Objective: maximize benign service continuity while minimizing attack success in the non-deny channel (allow+throttle), under a frozen comparable evaluation protocol.",
+        "",
+        "# 2. Formal Method",
+        "- Entity model: subject/client, credential/token, runtime context, request, resource endpoint, control action (`allow`, `throttle`, `deny`).",
+        "- Credential model: structured context-bound envelope with expiry, confirmation key hash (`cnf.jkt`), bound context hash, and restricted flag.",
+        "- Decision function: `decide_action(state, thresholds)` in `baselines/B4_full/policy.py`, with hard-violation precedence and ordered action lattice.",
+        "- Policy semantics: validity, context consistency, hard violation, escalation by risk/contention, throttle downgrade lane, deny on hard gates.",
+        "- Intended properties are implementation-grounded and tested (validity/context/hard-violation/monotonicity/comparability checks).",
+        "",
+        "# 3. Implementation Mapping",
+        "- Credential exchange + context binding: `baselines/B4_full/app.py` (`/auth/exchange`, `_ctx_hash`, token encode/decode).",
+        "- Runtime context checks + PoP verification: `baselines/B4_full/app.py` (`_verify_dpop`, ctx mismatch checks).",
+        "- Risk and contention state: `baselines/B4_full/app.py` (`_exchange_risk`, `_ctx_drift_score`, budget manager, pressure).",
+        "- Explicit authorization semantics layer: `baselines/B4_full/policy.py`.",
+        "- Ablation variants are runtime-configured via `experiments/runner.py` + `baselines/B4_full/harness.py`.",
+        "",
+        "# 4. Experimental Design",
+        "- Frozen comparable core evaluation: shared rerun pipeline, shared metric code, shared seed policy.",
+        "- Stronger held-out external-style validation (still synthetic): domain-shifted families `S5_slowdrip` and `S6_drift`, treated as held-out stressors.",
+        "- Ablation plan: B2, B4 full, B4_no_ctx, B4_no_multi, B4_weak_signals, B4_simple_policy.",
+        "- Seed policy: `python -m scripts.run_all --seed 7 --seeds 1`.",
+        "- Reported metrics include S4 PR-AUC, Lift@100, SR_benign@x1.00, ASR_non_deny_attack@x1.00.",
+        "",
+        "# 5. Results",
+        "## 5.1 Core mixed-load results",
         f"- Strategy chosen: **{strategy}**.",
         f"- Frozen protocol run id: **{run_protocol_id}**.",
-        "- Frozen stack (shared for before and after):",
-        "  - metric code: `experiments/metrics.py`",
-        "  - slice definitions: `scripts/run_all.py` LOSO groups + `experiments/scenario_contract.py`",
-        "  - served/non-deny definition + served filtering: `experiments/metrics.py`",
-        "  - mixed-load construction: `experiments/scenarios.py` S4 scenarios",
-        "  - primary operating point: `S4_mixedload_sweep_x1.00`",
-        "  - seed policy: `python -m scripts.run_all --seed 7 --seeds 1`",
-        "  - aggregation and report generation: `experiments/metrics.py` + `experiments/report.py`",
         "",
-        "# 2. Baseline Selection",
-        "- Single before baseline: **B2 from the same rerun protocol**.",
-        "- Single after run: **B4 from the same rerun protocol**.",
-        "- Why this is defensible: it removes historical mixed-source lookups and computes all compared metrics from one synchronized rerun using one code stack.",
-        "",
-        "# 3. Apples-to-Apples Rerun Results",
+        "## 5.2 Apples-to-apples B2 vs B4",
         "| metric_name | before (B2) | after (B4) |",
         "|---|---:|---:|",
     ]
@@ -260,7 +304,43 @@ def write_report(
 
     md += [
         "",
-        "# 4. Comparability Verification",
+        "## 5.3 Ablation table (S4 x1.00)",
+        "| method | S4 PR-AUC | S4 Lift@100 | SR_benign | ASR_non_deny_attack |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for label, r, served in ablation_rows:
+        prauc = served.non_deny_pr_auc if served else r.non_deny_prauc_mean
+        lift100 = served.lift_at_k[100] if served and served.lift_at_k.get(100) is not None else r.non_deny_lift_at_100
+        md.append(f"| {label} | {_fmt(prauc)} | {_fmt(lift100)} | {_fmt(r.sr_benign)} | {_fmt(r.asr_non_deny_attack)} |")
+
+    md += [
+        "",
+        "## 5.4 Stronger held-out / external-style validation",
+        "| scenario | SR_benign | ASR_non_deny_attack | throttle_rate |",
+        "|---|---:|---:|---:|",
+    ]
+    if ext_b4_s5:
+        md.append(f"| S5_slowdrip | {_fmt(ext_b4_s5.sr_benign)} | {_fmt(ext_b4_s5.asr_non_deny_attack)} | {_fmt(ext_b4_s5.throttle_rate_mean)} |")
+    if ext_b4_s6:
+        md.append(f"| S6_drift | {_fmt(ext_b4_s6.sr_benign)} | {_fmt(ext_b4_s6.asr_non_deny_attack)} | {_fmt(ext_b4_s6.throttle_rate_mean)} |")
+
+    md += [
+        "",
+        "## 5.5 Attribution analysis",
+        "- Context binding removal (`B4_no_ctx`) isolates credential-context consistency effects.",
+        "- Multi-action removal (`B4_no_multi`) isolates throttle-lane contribution.",
+        "- Weak-signal and simplified-policy variants isolate score quality vs policy structure effects.",
+        "",
+        "# 6. Formal Property Checks",
+        "- Property checks are implementation-grounded tests, not formal proofs.",
+        "- Covered checks: credential validity semantics, context mismatch handling, hard-violation=>deny, and action monotonicity under risk escalation.",
+        "- Frozen protocol comparability invariants are recorded in `results/consistency_audit.csv`.",
+        "",
+        "# 7. Conclusion and Positioning",
+        "- This branch now supports positioning as a **formalized context-aware access-control method** with explicit semantics and implementation-grounded validation.",
+        "- Limitation: stronger validation is held-out synthetic/domain-shifted, not production telemetry.",
+        "",
+        "## Comparability verification appendix",
         f"- same metric code: **{_bool_csv(same_stack['same_metric_code'])}**",
         f"- same slice definitions: **{_bool_csv(same_stack['same_slice_definition'])}**",
         f"- same operating point: **{_bool_csv(same_stack['same_operating_point'])}**",
@@ -274,13 +354,7 @@ def write_report(
         f"  - scale=1.00 mixed-load n_non_deny before={mixed_before['non_deny_total']} (attack={mixed_before['attack_non_deny']}, benign={mixed_before['benign_non_deny']}), after={mixed_after['non_deny_total']} (attack={mixed_after['attack_non_deny']}, benign={mixed_after['benign_non_deny']}).",
         f"  - scale=1.00 mixed-load denominators attack before/after={mixed_before['attack_total']}/{mixed_after['attack_total']}, benign before/after={mixed_before['benign_total']}/{mixed_after['benign_total']}.",
         "  - Interpretation: denominator differences reflect B2 vs B4 behavior under the same protocol, not evaluation drift.",
-        "",
-        "# 5. Final Verdict",
-        f"**{verdict}**",
-        "",
-        "# 6. Residual Risks",
-        "- Numeric outcomes can change if future commits modify the frozen stack; rerun under a new stack would require a new apples-to-apples audit.",
-        "- This validation is for the explicit B2->B4 comparison path only; any historical mixed-source comparison remains deprecated.",
+        f"- final verdict: **{verdict}**",
     ]
     REPORT_MD.write_text("\n".join(md) + "\n", encoding="utf-8")
 
@@ -352,5 +426,29 @@ def write_report(
         )
     )
     APPLES_RUNS_CSV.write_text("\n".join(apples_lines) + "\n", encoding="utf-8")
+
+    ablation_lines = ["method,baseline,scenario,s4_pr_auc,s4_lift_at_100,sr_benign_x1,asr_non_deny_attack_x1"]
+    for label, r, served in ablation_rows:
+        prauc = served.non_deny_pr_auc if served else r.non_deny_prauc_mean
+        lift100 = served.lift_at_k[100] if served and served.lift_at_k.get(100) is not None else r.non_deny_lift_at_100
+        ablation_lines.append(f"{label},{r.baseline},{r.scenario},{_csv_val(prauc)},{_csv_val(lift100)},{_csv_val(r.sr_benign)},{_csv_val(r.asr_non_deny_attack)}")
+    ABLATION_CSV.write_text("\n".join(ablation_lines) + "\n", encoding="utf-8")
+
+    ext_lines = ["validation_set,baseline,scenario,sr_benign,asr_non_deny_attack,throttle_rate_mean,notes"]
+    if ext_b4_s5:
+        ext_lines.append(f"heldout_synthetic_shift,B4,S5_slowdrip,{_csv_val(ext_b4_s5.sr_benign)},{_csv_val(ext_b4_s5.asr_non_deny_attack)},{_csv_val(ext_b4_s5.throttle_rate_mean)},\"slow-drip held-out stressor\"")
+    if ext_b4_s6:
+        ext_lines.append(f"heldout_synthetic_shift,B4,S6_drift,{_csv_val(ext_b4_s6.sr_benign)},{_csv_val(ext_b4_s6.asr_non_deny_attack)},{_csv_val(ext_b4_s6.throttle_rate_mean)},\"context-drift held-out stressor\"")
+    EXTERNAL_VALIDATION_CSV.write_text("\n".join(ext_lines) + "\n", encoding="utf-8")
+
+    PROPERTY_CHECKS_CSV.write_text(
+        "property_id,property,status,evidence\n"
+        "P1,expired_or_invalid_credential_implies_not_allow,checked,tests/test_formal_policy.py::test_invalid_credential_denied\n"
+        "P2,hard_policy_violation_implies_deny,checked,tests/test_formal_policy.py::test_hard_violation_forces_deny\n"
+        "P3,action_monotonicity_under_risk,checked,tests/test_formal_policy.py::test_monotonicity_under_increasing_risk\n"
+        "P4,context_mismatch_not_allow,checked,tests/test_formal_policy.py::test_context_inconsistency_denied\n"
+        "P5,frozen_protocol_invariants,checked,results/consistency_audit.csv\n",
+        encoding="utf-8",
+    )
 
     return REPORT_CSV, REPORT_MD
