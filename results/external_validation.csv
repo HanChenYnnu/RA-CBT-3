@@ -1,0 +1,3 @@
+validation_set,baseline,scenario,sr_benign,asr_non_deny_attack,throttle_rate_mean,notes
+heldout_synthetic_shift,B4,S5_slowdrip,,,0.0000,"slow-drip held-out stressor"
+heldout_synthetic_shift,B4,S6_drift,,,0.2059,"context-drift held-out stressor"

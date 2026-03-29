@@ -118,6 +118,58 @@ def run_b4_budget_sweep(*, out_dir: Path, seed: int) -> list[EventRow]:
     return sweep_events
 
 
+def run_b4_ablation_s4_scale1(
+    *,
+    out_dir: Path,
+    seed: int,
+    baseline_label: str,
+    disable_ctx_binding: bool,
+    disable_multi_action: bool,
+    weak_signals: bool,
+    simple_policy: bool,
+) -> list[EventRow]:
+    prior = {
+        "B4_RPM_LIMIT": os.environ.get("B4_RPM_LIMIT"),
+        "B4_TPM_LIMIT": os.environ.get("B4_TPM_LIMIT"),
+        "B4_MAXTOK_SCALE": os.environ.get("B4_MAXTOK_SCALE"),
+        "BASELINE_LABEL": os.environ.get("BASELINE_LABEL"),
+        "B4_DISABLE_CTX_BINDING": os.environ.get("B4_DISABLE_CTX_BINDING"),
+        "B4_DISABLE_MULTI_ACTION": os.environ.get("B4_DISABLE_MULTI_ACTION"),
+        "B4_WEAK_SIGNALS": os.environ.get("B4_WEAK_SIGNALS"),
+        "B4_SIMPLE_POLICY": os.environ.get("B4_SIMPLE_POLICY"),
+    }
+    os.environ["BASELINE_LABEL"] = baseline_label
+    os.environ["B4_DISABLE_CTX_BINDING"] = "1" if disable_ctx_binding else "0"
+    os.environ["B4_DISABLE_MULTI_ACTION"] = "1" if disable_multi_action else "0"
+    os.environ["B4_WEAK_SIGNALS"] = "1" if weak_signals else "0"
+    os.environ["B4_SIMPLE_POLICY"] = "1" if simple_policy else "0"
+    os.environ["B4_RPM_LIMIT"] = str(_scaled(120, 1.0))
+    os.environ["B4_TPM_LIMIT"] = str(_scaled(6200, 1.0))
+    os.environ["B4_MAXTOK_SCALE"] = "1.10"
+    events = [
+        EventRow(
+            baseline=baseline_label,
+            scenario=e.scenario,
+            status_code=e.status_code,
+            reason=e.reason,
+            decision=e.decision,
+            latency_ms=e.latency_ms,
+            usage_total_tokens=e.usage_total_tokens,
+            benign=e.benign,
+            risk=e.risk,
+            seed=e.seed,
+            label=e.label,
+        )
+        for e in _run_mixedload_for_scale(out_dir=out_dir, seed=seed, scale=1.0)
+    ]
+    for k, v in prior.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+    return events
+
+
 def _run_b2_mixedload_for_scale(*, out_dir: Path, seed: int, scale: float) -> list[EventRow]:
     raw_dir = out_dir / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)

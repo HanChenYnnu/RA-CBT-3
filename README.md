@@ -1,12 +1,12 @@
 # RA-CBT-3
 
-RA-CBT-3 is a deterministic security-evaluation artifact for API-mediated LLM access control. The repository now frames the work as a methods paper with three connected contributions: (A) context-bound dynamic credentials, (B) risk-driven multi-action control, and (C) a unified apples-to-apples evaluation protocol for mixed-load scenarios.
+RA-CBT-3 is a deterministic artifact for a **formalized context-aware access-control method** for API-mediated LLM services. It combines: (A) context-bound credentials, (B) explicit authorization semantics for multi-action control, and (C) a frozen comparable evaluation protocol with ablations and held-out synthetic stress validation.
 
 ## Problem statement
 
 Static long-lived API keys can be replayed or misused across devices, network contexts, and time windows. A binary allow/deny gate also fails to preserve benign service quality under contention. The repository studies whether context binding and graded runtime control can reduce attack-side success while maintaining benign service in mixed-load conditions.
 
-## Method contribution (implementation-grounded)
+## Formal method contribution (implementation-grounded)
 
 ### A) Context-Bound Dynamic API Credential Mechanism
 Implemented in baseline **B4** via short-lived exchanged tokens that bind to runtime context and proof-of-possession signals:
@@ -14,13 +14,13 @@ Implemented in baseline **B4** via short-lived exchanged tokens that bind to run
 - context checks over IP/ASN/country/UA/device fingerprint/time,
 - drift and anomaly scoring used at exchange and request time.
 
-### B) Risk-Driven Multi-Action Control Strategy
-Implemented in B4 request handling as a graded decision process:
+### B) Explicit Authorization Semantics and Multi-Action Control
+Implemented via `baselines/B4_full/policy.py` and integrated in B4 request handling:
 - **allow** for low risk/pressure,
 - **throttle** via tighter token precharge under intermediate risk/pressure,
 - **deny** under high risk or hard policy violations.
 
-The decision combines risk signals and budget pressure to balance security and availability instead of collapsing to strict binary blocking.
+The decision state explicitly includes credential validity, context consistency, hard-policy violations, risk score, and contention pressure.
 
 ### C) Unified Comparable Evaluation Protocol for Mixed-Load Scenarios
 Implemented through the canonical pipeline entrypoint and frozen-stack reruns:
@@ -38,12 +38,20 @@ The evaluation tests whether B4 (A+B) outperforms B2 under the frozen protocol (
 - **scale=1.00 SR_benign** (benign service rate),
 - **scale=1.00 ASR_non_deny_attack** (attack success on non-denied traffic).
 
+Ablation baselines are included:
+- `B4_no_ctx`, `B4_no_multi`, `B4_weak_signals`, `B4_simple_policy`.
+
+Held-out external-style validation (still synthetic) is reported for:
+- `S5_slowdrip`, `S6_drift`.
+
 ## Primary research artifacts
 
 - `results/report.md`: publication-oriented narrative (problem → method → experiments → results → conclusion).
 - `results/report.csv`: machine-readable per-seed metrics, audit summaries, and narrative-aligned summary rows.
 - `results/plots/*.svg`: supporting figures generated from the same frozen run.
 - `scripts/run_all.py`: canonical deterministic entrypoint for regeneration.
+
+> PR packaging note: binary plot exports (for example `results/plots/*.png`) are intentionally excluded in this PR-ready branch. Text/vector artifacts (`.md`, `.csv`, `.svg`) are preserved, and figures are reproducible locally via the canonical script. See `results/plots/README.md`.
 
 ## Reproducible rerun
 

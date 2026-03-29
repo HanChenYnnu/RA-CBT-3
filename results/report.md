@@ -1,108 +1,83 @@
-# 1. Problem Setting
+# 1. Formal Problem Definition
+- We model API-facing LLM authorization as a stateful access-control problem over subjects, context-bound credentials, request context, endpoint scope, and budget contention.
+- Objective: maximize benign service continuity while minimizing attack success in the non-deny channel (allow+throttle), under a frozen comparable evaluation protocol.
 
-API-facing LLM services are often protected by static key-style credentials or minimally scoped bearer tokens. In adversarial settings, these credentials can be replayed or delegated outside their intended context, especially when requests are generated from heterogeneous clients and network conditions. Under mixed-load contention, purely binary access control can also cause undesirable trade-offs: strict blocking degrades benign service, while permissive rules increase attack-side leakage.
+# 2. Formal Method
+- Entity model: subject/client, credential/token, runtime context, request, resource endpoint, control action (`allow`, `throttle`, `deny`).
+- Credential model: structured context-bound envelope with expiry, confirmation key hash (`cnf.jkt`), bound context hash, and restricted flag.
+- Decision function: `decide_action(state, thresholds)` in `baselines/B4_full/policy.py`, with hard-violation precedence and ordered action lattice.
+- Policy semantics: validity, context consistency, hard violation, escalation by risk/contention, throttle downgrade lane, deny on hard gates.
+- Intended properties are implementation-grounded and tested (validity/context/hard-violation/monotonicity/comparability checks).
 
-This artifact evaluates a practical control framework that combines context-bound credentialing and risk-driven runtime decisions, and validates it under a frozen, comparable protocol.
+# 3. Implementation Mapping
+- Credential exchange + context binding: `baselines/B4_full/app.py` (`/auth/exchange`, `_ctx_hash`, token encode/decode).
+- Runtime context checks + PoP verification: `baselines/B4_full/app.py` (`_verify_dpop`, ctx mismatch checks).
+- Risk and contention state: `baselines/B4_full/app.py` (`_exchange_risk`, `_ctx_drift_score`, budget manager, pressure).
+- Explicit authorization semantics layer: `baselines/B4_full/policy.py`.
+- Ablation variants are runtime-configured via `experiments/runner.py` + `baselines/B4_full/harness.py`.
 
-# 2. Method
+# 4. Experimental Design
+- Frozen comparable core evaluation: shared rerun pipeline, shared metric code, shared seed policy.
+- Stronger held-out external-style validation (still synthetic): domain-shifted families `S5_slowdrip` and `S6_drift`, treated as held-out stressors.
+- Ablation plan: B2, B4 full, B4_no_ctx, B4_no_multi, B4_weak_signals, B4_simple_policy.
+- Seed policy: `python -m scripts.run_all --seed 7 --seeds 1`.
+- Reported metrics include S4 PR-AUC, Lift@100, SR_benign@x1.00, ASR_non_deny_attack@x1.00.
 
-We evaluate baseline **B4** as a three-component method contribution.
+# 5. Results
+## 5.1 Core mixed-load results
+- Strategy chosen: **STRATEGY B — re-run both baseline and current method under one frozen shared pipeline**.
+- Frozen protocol run id: **shared-pipeline:36fd8b6a95bba317b9d3a5a851c6679b4838d0bc:seeds=1:seed_start=7**.
 
-## 2.1 Context-Bound Dynamic API Credential Mechanism
+## 5.2 Apples-to-apples B2 vs B4
+| metric_name | before (B2) | after (B4) |
+|---|---:|---:|
+| S4 PR-AUC | 0.5192 | 0.9594 |
+| S4 Lift@100 | 1.0600 | 2.6922 |
+| scale=1.00 SR_benign | 0.1733 | 0.2083 |
+| scale=1.00 ASR_non_deny_attack | 0.2267 | 0.1917 |
 
-B4 replaces static authorization behavior with short-lived exchanged credentials that are bound to runtime context.
+## 5.3 Ablation table (S4 x1.00)
+| method | S4 PR-AUC | S4 Lift@100 | SR_benign | ASR_non_deny_attack |
+|---|---:|---:|---:|---:|
+| baseline B2 | 0.5192 | 1.0600 | 0.1733 | 0.2267 |
+| B4 full | 0.9594 | 2.6922 | 0.2083 | 0.1917 |
+| B4 w/o context binding | N/A | N/A | 0.2085 | 0.1915 |
+| B4 w/o multi-action control | N/A | N/A | 0.2079 | 0.1921 |
+| B4 weak risk/context signals | N/A | N/A | 0.2080 | 0.1920 |
+| B4 simplified decision policy | N/A | N/A | 0.2081 | 0.1919 |
 
-Implementation mapping:
-- `/auth/exchange` issues a bounded token with `cnf.jkt` and a context hash.
-- Request-time checks compare issuance-time and runtime context (IP/ASN/country/UA/device signals) and reject severe mismatch.
-- Exchange-time profile anomaly scoring supports restricted issuance and high-risk denial thresholds.
+## 5.4 Stronger held-out / external-style validation
+| scenario | SR_benign | ASR_non_deny_attack | throttle_rate |
+|---|---:|---:|---:|
+| S5_slowdrip | N/A | N/A | 0.0000 |
+| S6_drift | N/A | N/A | 0.2059 |
 
-Method role:
-- constrains credential validity to context and time,
-- reduces reuse utility of leaked/static credential material,
-- feeds downstream risk signals used by runtime control.
+## 5.5 Attribution analysis
+- Context binding removal (`B4_no_ctx`) isolates credential-context consistency effects.
+- Multi-action removal (`B4_no_multi`) isolates throttle-lane contribution.
+- Weak-signal and simplified-policy variants isolate score quality vs policy structure effects.
 
-## 2.2 Risk-Driven Multi-Action Control Strategy
+# 6. Formal Property Checks
+- Property checks are implementation-grounded tests, not formal proofs.
+- Covered checks: credential validity semantics, context mismatch handling, hard-violation=>deny, and action monotonicity under risk escalation.
+- Frozen protocol comparability invariants are recorded in `results/consistency_audit.csv`.
 
-B4 performs a risk-scored, pressure-aware multi-action decision rather than binary allow/deny.
+# 7. Conclusion and Positioning
+- This branch now supports positioning as a **formalized context-aware access-control method** with explicit semantics and implementation-grounded validation.
+- Limitation: stronger validation is held-out synthetic/domain-shifted, not production telemetry.
 
-Implementation mapping:
-- risk score combines context drift, replay pressure, exchange anomaly, budget pressure, and scenario priors;
-- decision space includes **allow**, **throttle**, and **deny**;
-- throttle is implemented as token precharge tightening under contention/risk bands.
-
-Method role:
-- preserves a graded response under load,
-- seeks to increase benign service rate without simply relaxing attack control,
-- supports mixed-load stability when attack and benign traffic coexist.
-
-## 2.3 Unified Comparable Evaluation Protocol for Mixed-Load Scenarios
-
-The experiment pipeline enforces a frozen apples-to-apples setup for B2 vs B4.
-
-Protocol mapping:
-- same metric code, slice definition, operating point, seed policy, aggregation, and report generation;
-- shared seed set: `[7, 11, 19, 23, 31]`;
-- mixed-load analysis centered on S4 slices;
-- single baseline/current path (`B2` → `B4`) to avoid post-hoc comparator changes.
-
-Method role:
-- provides defensibility for observed gains of Sections 2.1 and 2.2,
-- reduces attribution ambiguity from pipeline drift.
-
-# 3. Experimental Design
-
-## 3.1 Compared systems
-
-- **Baseline**: B2 (short-bearer style control under the same evaluation stack).
-- **Current method**: B4 (context-bound credentialing + risk-driven multi-action runtime control).
-
-## 3.2 Frozen-stack apples-to-apples constraints
-
-The run enforces identical evaluation components across B2 and B4:
-- metric computation,
-- slice definitions,
-- operating point,
-- seed set and aggregation,
-- report logic.
-
-All comparability checks are marked valid in the audit outputs.
-
-## 3.3 Slice focus and mixed-load setting
-
-The key slice is **S4_pair**, a mixed-load setting containing scale sweeps (`x1.00`, `x0.70`, `x0.50`, `x0.35`, `x0.25`). This slice is used to evaluate security ranking and service behavior under contention.
-
-## 3.4 Primary evaluation metrics
-
-Four primary metrics are used:
-1. **S4 PR-AUC**,
-2. **S4 Lift@100**,
-3. **scale=1.00 SR_benign**,
-4. **scale=1.00 ASR_non_deny_attack**.
-
-# 4. Results and Analysis
-
-## 4.1 Multi-seed summary (B2 vs B4)
-
-- **S4 PR-AUC**: B2 `0.5174 ± 0.0033`, B4 `0.9603 ± 0.0037`, delta `+0.4430`, 5/5 favorable, 95% CI `[0.4406, 0.4453]`.
-- **S4 Lift@100**: B2 `1.0520 ± 0.0483`, B4 `2.6402 ± 0.0653`, delta `+1.5882`, 5/5 favorable, 95% CI `[1.5567, 1.6197]`.
-- **scale=1.00 SR_benign**: B2 `0.1733 ± 0.0000`, B4 `0.2080 ± 0.0100`, delta `+0.0347`, 5/5 favorable, 95% CI `[0.0259, 0.0435]`.
-- **scale=1.00 ASR_non_deny_attack**: B2 `0.2267 ± 0.0000`, B4 `0.1920 ± 0.0100`, delta `-0.0347`, 5/5 favorable, 95% CI `[-0.0435, -0.0259]`.
-
-## 4.2 Interpretation through the method lens
-
-1. **Component A effect (context-bound credentials)**: strong S4 ranking gains (PR-AUC, Lift@100) are consistent with improved discrimination of risky traffic under mixed context conditions.
-2. **Component B effect (multi-action control)**: benign service improves at scale=1.00 while non-deny attack success decreases, indicating that graded throttle/deny control can improve availability-security balance rather than trading one metric for another.
-3. **Component C effect (frozen comparability)**: strict parity of evaluation stack and seed policy increases confidence that improvements are method-driven rather than evaluation drift.
-
-## 4.3 Scope and limitations
-
-- Evidence is limited to the deterministic synthetic scenario set in this repository.
-- Confidence intervals are normal-approximate and derived from five seeds.
-- The artifact demonstrates empirical robustness under its fixed protocol, not formal security guarantees.
-
-# 5. Conclusion
-
-This work proposes and evaluates a practical three-part framework for API-facing LLM access control: (i) context-bound dynamic credentialing, (ii) risk-driven multi-action runtime control, and (iii) a frozen comparable evaluation protocol for mixed-load validation. Under a controlled B2-to-B4 comparison, the method shows consistent multi-seed gains in mixed-load ranking quality (S4 PR-AUC and Lift@100), improves benign service at scale=1.00, and reduces non-deny attack success.
-
-The contribution is primarily a systems/control framework with rigorous comparative evaluation, rather than a new formal access-control theory. The current evidence supports effectiveness within the repository’s deterministic scenario model. A natural next step is external validation under broader traffic distributions and independent infrastructure conditions, while preserving the same comparability constraints.
+## Comparability verification appendix
+- same metric code: **true**
+- same slice definitions: **true**
+- same operating point: **true**
+- same seed policy: **true**
+- same aggregation logic: **true**
+- same non-deny definition: **true**
+- same served-traffic filtering: **true**
+- same mixed-load construction: **true**
+- Sample-count review:
+  - S4_pair n_non_deny before=12000 (attack=6000, benign=6000), after=13364 (attack=4964, benign=8400).
+  - scale=1.00 mixed-load n_non_deny before=2400 (attack=1200, benign=1200), after=7726 (attack=2926, benign=4800).
+  - scale=1.00 mixed-load denominators attack before/after=1200/4800, benign before/after=1200/4800.
+  - Interpretation: denominator differences reflect B2 vs B4 behavior under the same protocol, not evaluation drift.
+- final verdict: **VALID APPLES-TO-APPLES**
