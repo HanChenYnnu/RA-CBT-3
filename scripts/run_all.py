@@ -24,6 +24,7 @@ LOSO_GROUPS = {
     "S2_pair": ["S2_token_leak_hard", "S2_delegated_misuse_hard", "S2_benign_control_hard"],
     "S3_pair": ["S3_replay_hard", "S3_replay_nearmiss_hard", "S3_replay_blended_hard", "S3_benign_control_hard"],
     "S4_pair": ["S4_mixedload_sweep_x1.00", "S4_mixedload_sweep_x0.70", "S4_mixedload_sweep_x0.50", "S4_mixedload_sweep_x0.35", "S4_mixedload_sweep_x0.25"],
+    "S7_pair": ["S7_cross_device_reuse_attack", "S7_cross_device_reuse_benign"],
 }
 
 
@@ -116,7 +117,7 @@ def main() -> None:
 
     risk_summary = compute_b4_risk_summary(events)
     decision_latency = compute_decision_latency_stats(events, ["B4", "B3"])
-    write_report(rows, seeds=len(seeds), b4_eval=b4_eval, calibration=calibration_summary, risk_summary=risk_summary, decision_latency=decision_latency, b2_served=b2_served, b4_b2_deltas=b4_b2_deltas)
+    write_report(rows, events=events, seeds=len(seeds), b4_eval=b4_eval, calibration=calibration_summary, risk_summary=risk_summary, decision_latency=decision_latency, b2_served=b2_served, b4_b2_deltas=b4_b2_deltas)
     plots = generate_plots(rows, b4_eval=b4_eval, b2_served=b2_served, b4_b2_deltas=b4_b2_deltas)
     print(f"[run_all] events={len(events)} rows={len(rows)} plots={len(plots)} overall_auroc={b4_eval.overall_auroc}")
 

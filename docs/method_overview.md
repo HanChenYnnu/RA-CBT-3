@@ -1,48 +1,17 @@
-# Formal Method Overview
+# Method Overview (Formalized Access Control)
 
-## Access-Control Object
+This artifact defines a formalized context-aware access-control method for API-facing LLM services.
 
-This artifact defines a context-aware authorization object for API-facing LLM services:
+- Formal semantics: `docs/formal_semantics.md`.
+- Formal propositions/proofs: `docs/proofs.md`.
+- Implementation decision object: `baselines/B4_full/policy.py`.
+- End-to-end enforcement and state transitions: `baselines/B4_full/app.py`.
 
-- **Subject**: API client identity.
-- **Credential**: short-lived exchanged token with confirmation key hash and bound context hash.
-- **Runtime context**: IP/ASN/country/UA/device/time tuple.
-- **Request**: model call carrying token, DPoP proof, and context headers.
-- **Resource**: `/v1/chat/completions`.
-- **Control action**: ordered lattice `allow < throttle < deny`.
+Core control order is explicit and reusable: `allow < throttle < deny`.
+Rule composition is severity-max with deny precedence.
 
-## Authorization Semantics
+Canonical reproducibility entrypoint remains:
 
-The explicit decision function is implemented in `baselines/B4_full/policy.py` as:
-
-`δ(state, thresholds) -> {allow, throttle, deny}`
-
-where state includes:
-
-- credential validity,
-- context consistency,
-- hard-policy violation,
-- risk score,
-- contention state,
-- restricted-credential flag.
-
-Hard violations and invalid/ inconsistent credentials are deny-precedence.
-
-## Implementation Mapping
-
-- Exchange/binding: `baselines/B4_full/app.py` (`/auth/exchange`, `_ctx_hash`, token encode/decode).
-- PoP and replay checks: `baselines/B4_full/app.py` (`_verify_dpop`).
-- Risk/context/contention signals: `baselines/B4_full/app.py`.
-- Formal decision object: `baselines/B4_full/policy.py`.
-- Ablation baselines: `experiments/runner.py` + `baselines/B4_full/harness.py`.
-
-## Intended Properties (Validated by Tests)
-
-- Invalid or expired credentials are never low-risk allow.
-- Hard violation implies deny.
-- Context inconsistency implies deny.
-- Increasing risk does not yield more permissive action (bounded monotonicity).
-- Frozen operating-point invariants are checked for report comparability.
-
-These are implementation-grounded checks, not machine-checked proofs.
-
+```bash
+python -m scripts.run_all --seed 7 --seeds 1
+```

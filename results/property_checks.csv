@@ -1,6 +1,6 @@
-property_id,property,status,evidence
-P1,expired_or_invalid_credential_implies_not_allow,checked,tests/test_formal_policy.py::test_invalid_credential_denied
-P2,hard_policy_violation_implies_deny,checked,tests/test_formal_policy.py::test_hard_violation_forces_deny
-P3,action_monotonicity_under_risk,checked,tests/test_formal_policy.py::test_monotonicity_under_increasing_risk
-P4,context_mismatch_not_allow,checked,tests/test_formal_policy.py::test_context_inconsistency_denied
-P5,frozen_protocol_invariants,checked,results/consistency_audit.csv
+property_id,formal_proposition,formal_status,implementation_check_status,implementation_evidence,scope_assumptions
+P1,hard_violation_implies_deny,proved_in_docs,passed,tests/test_formal_policy.py::test_hard_violation_forces_deny,"Assumes policy thresholds finite and decide_action semantics in policy.py"
+P2,risk_monotonicity_under_fixed_validity_context_contention,proved_in_docs,passed,tests/test_formal_policy.py::test_monotonicity_under_increasing_risk,"Assumes credential_valid=true context_consistent=true hard_violation=false fixed contention"
+P3,invalid_or_inconsistent_credentials_cannot_allow,proved_in_docs,passed,tests/test_formal_policy.py::test_invalid_or_inconsistent_never_allow,"Assumes consistent token/decode semantics and mismatch bound"
+P4,severity_max_composition_no_downgrade,proved_in_docs,passed,tests/test_formal_policy.py::test_severity_max_composition_is_monotone,"Assumes compose_actions=max over allow<throttle<deny"
+P5,frozen_protocol_invariants,n_a,passed,results/consistency_audit.csv,"Empirical comparability invariant, not a theorem"

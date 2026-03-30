@@ -149,6 +149,21 @@ def run_b4_variant_scenario(
                 record_sample(scenario=scenario, baseline="B4", caps=manifest, auth_present=True, dpop_present=True, dpop_valid=True, exchange_called=False, replay_key=replay_key, asn="AS100", country="US", ua_family="browser", max_tokens=int(req.get("max_tokens", 0)))
                 client.post("/v1/chat/completions", json=req, headers={"Authorization": f"Bearer {owner_token}", "DPoP": replay, "X-Forwarded-For": req_ip, "X-CTX": req_ctx})
 
+        elif scenario in {"S7_cross_device_reuse_attack", "S7_cross_device_reuse_benign"}:
+            issue_ctx = _ctx("10.0.0.11", "AS100", "US", "browser/100.1", "fp-1")
+            ex = _exchange(client, LEGIT_JWK, issue_ctx, "10.0.0.11")
+            token, jkt = str(ex["access_token"]), str(ex["cnf"]["jkt"])
+            for idx, req in enumerate(reqs):
+                if scenario == "S7_cross_device_reuse_attack":
+                    ip = f"203.0.113.{(idx % 50) + 1}"
+                    req_ctx = _ctx(ip, "AS999", "GB", f"browser/120.{idx%2}", f"atk-fp-{idx%3}")
+                else:
+                    ip = f"10.0.0.{(idx % 15) + 1}"
+                    req_ctx = _ctx(ip, "AS100", "US", f"browser/100.{idx%3}", "fp-1")
+                headers = {"Authorization": f"Bearer {token}", "DPoP": _proof(LEGIT_PRIVATE, token, f"{scenario}-{idx}", jkt), "X-Forwarded-For": ip, "X-CTX": req_ctx}
+                validate_request_semantics(scenario=scenario, auth_present=True, dpop_present=True, dpop_valid=True, exchange_called=scenario == "S7_cross_device_reuse_benign")
+                record_sample(scenario=scenario, baseline="B4", caps=manifest, auth_present=True, dpop_present=True, dpop_valid=True, exchange_called=scenario == "S7_cross_device_reuse_benign", replay_key="", asn="AS100", country="US", ua_family="browser", max_tokens=int(req.get("max_tokens", 0)))
+                client.post("/v1/chat/completions", json=req, headers=headers)
         else:
             burst = {"S4_burst", "S4_burst_L1", "S4_burst_L2", "S4_burst_L3", "S4_burst_L4"}
             issue_ctx = _ctx("10.0.0.12", "AS100", "US", "browser/100.2", "fp-2") if scenario in burst else owner_ctx

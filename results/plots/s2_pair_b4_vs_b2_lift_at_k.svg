@@ -2,26 +2,26 @@
 <text x="20" y="24" font-size="16">S2_pair Lift@K: B4 vs B2</text>
 <line x1="50" y1="370" x2="590" y2="370" stroke="black"/>
 <line x1="50" y1="370" x2="50" y2="50" stroke="black"/>
-<circle cx="50.0" cy="194.4" r="2" fill="#1f77b4" opacity="0.2"/>
-<circle cx="170.0" cy="194.4" r="2" fill="#1f77b4" opacity="0.2"/>
-<circle cx="290.0" cy="194.4" r="2" fill="#1f77b4" opacity="0.2"/>
-<circle cx="590.0" cy="257.9" r="2" fill="#1f77b4" opacity="0.2"/>
+<circle cx="50.0" cy="162.7" r="2" fill="#1f77b4" opacity="0.2"/>
+<circle cx="170.0" cy="162.7" r="2" fill="#1f77b4" opacity="0.2"/>
+<circle cx="290.0" cy="169.3" r="2" fill="#1f77b4" opacity="0.2"/>
+<circle cx="590.0" cy="233.1" r="2" fill="#1f77b4" opacity="0.2"/>
 <circle cx="50.0" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
 <circle cx="170.0" cy="50.0" r="2" fill="#1f77b4" opacity="0.2"/>
-<circle cx="290.0" cy="114.5" r="2" fill="#1f77b4" opacity="0.2"/>
-<circle cx="590.0" cy="257.9" r="2" fill="#1f77b4" opacity="0.2"/>
+<circle cx="290.0" cy="117.7" r="2" fill="#1f77b4" opacity="0.2"/>
+<circle cx="590.0" cy="222.8" r="2" fill="#1f77b4" opacity="0.2"/>
 <circle cx="50.0" cy="370.0" r="2" fill="#d62728" opacity="0.2"/>
-<circle cx="170.0" cy="336.5" r="2" fill="#d62728" opacity="0.2"/>
-<circle cx="290.0" cy="339.4" r="2" fill="#d62728" opacity="0.2"/>
-<circle cx="590.0" cy="349.5" r="2" fill="#d62728" opacity="0.2"/>
-<circle cx="50.0" cy="253.3" r="2" fill="#d62728" opacity="0.2"/>
-<circle cx="170.0" cy="284.4" r="2" fill="#d62728" opacity="0.2"/>
-<circle cx="290.0" cy="297.5" r="2" fill="#d62728" opacity="0.2"/>
-<circle cx="590.0" cy="320.0" r="2" fill="#d62728" opacity="0.2"/>
-<polyline fill="none" stroke="#1f77b4" stroke-width="2" points="50.0,149.0 170.0,149.0 290.0,159.9 590.0,257.9"/>
+<circle cx="170.0" cy="316.2" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="290.0" cy="320.4" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="590.0" cy="304.8" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="50.0" cy="297.0" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="170.0" cy="265.6" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="290.0" cy="276.7" r="2" fill="#d62728" opacity="0.2"/>
+<circle cx="590.0" cy="280.2" r="2" fill="#d62728" opacity="0.2"/>
+<polyline fill="none" stroke="#1f77b4" stroke-width="2" points="50.0,124.7 170.0,124.7 290.0,139.4 590.0,222.8"/>
 <line x1="450" y1="35" x2="470" y2="35" stroke="#1f77b4" stroke-width="2"/>
 <text x="474" y="39" font-size="11">B4</text>
-<polyline fill="none" stroke="#d62728" stroke-width="2" points="50.0,318.8 170.0,307.4 290.0,318.8 590.0,337.6"/>
+<polyline fill="none" stroke="#d62728" stroke-width="2" points="50.0,339.2 170.0,293.1 290.0,302.3 590.0,293.1"/>
 <line x1="450" y1="51" x2="470" y2="51" stroke="#d62728" stroke-width="2"/>
 <text x="474" y="55" font-size="11">B2</text>
 </svg>

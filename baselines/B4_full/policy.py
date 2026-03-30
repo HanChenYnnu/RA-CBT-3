@@ -1,4 +1,4 @@
-"""Formalized authorization semantics used by B4 and ablation variants."""
+"""Formal authorization and state-transition semantics used by B4 variants."""
 
 from __future__ import annotations
 
@@ -35,12 +35,29 @@ class CredentialEnvelope:
 
 @dataclass(frozen=True)
 class AuthorizationState:
-    credential_valid: bool
-    context_consistent: bool
-    hard_violation: bool
-    risk_score: float
-    contention: float
-    restricted_credential: bool
+    """Authorization state tuple Σ for decision relation δ(Σ)->A.
+
+    Tuple fields map to formal objects:
+    - subject_state: identity / client principal state.
+    - credential_valid: validity under signature/expiry/invalidation checks.
+    - context_consistent: context-bound consistency class (within allowed drift).
+    - request_state: current request metadata class.
+    - resource_scope: requested endpoint/action scope.
+    - risk_score: risk scalar in [0,1].
+    - contention: shared budget contention scalar in [0,1].
+    - hard_violation: hard policy violation predicate.
+    - restricted_credential: restricted-scope credential predicate.
+    """
+
+    subject_state: str = "known"
+    credential_valid: bool = True
+    context_consistent: bool = True
+    request_state: str = "api_call"
+    resource_scope: str = "/v1/chat/completions"
+    risk_score: float = 0.0
+    contention: float = 0.0
+    hard_violation: bool = False
+    restricted_credential: bool = False
 
 
 @dataclass(frozen=True)
@@ -67,6 +84,16 @@ def decide_action(state: AuthorizationState, thresholds: PolicyThresholds) -> Co
     return ControlAction.ALLOW
 
 
+def compose_actions(*actions: ControlAction) -> ControlAction:
+    """Severity-max composition operator ⊔ over action lattice.
+
+    The order is ALLOW < THROTTLE < DENY and composition returns max severity.
+    """
+
+    if not actions:
+        return ControlAction.ALLOW
+    return max(actions, key=int)
+
+
 def is_more_permissive(a: ControlAction, b: ControlAction) -> bool:
     return int(a) < int(b)
-
