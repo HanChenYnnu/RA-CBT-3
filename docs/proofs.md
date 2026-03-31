@@ -1,33 +1,43 @@
-# Propositions and Proof Sketches
+# Abstract Semantic Proofs
 
-## P1. Hard-violation priority
+Proofs below are over the rule system in `docs/formal_semantics.md`, not over source-order in code.
 
-**Statement.** If hard violation predicate \(\nu=true\), then \(\delta(\Sigma,\Theta)=\textsf{deny}\).
+## Theorem B1 (Hard-violation deny)
 
-**Proof.** Direct. In `decide_action`, the first guard returns `deny` when `hard_violation` is true; no later branch is reachable. ∎
+**Statement.** If \(\Gamma \vdash \Sigma \Rightarrow R_{hard}:\mathsf{deny}\), then \(\Gamma \vdash \Sigma \Downarrow \mathsf{deny}\).
 
-## P2. Monotonicity under increasing risk
+**Proof.** By rule `(AUTH)`, final action is \(a=\bigsqcup_i a_i\) over all applicable rules. Since one member is `deny` from `(HARD)`, and `deny` is top element of \((A,\preceq)\), \(a=\mathsf{deny}\). ∎
 
-**Statement.** Fix credential validity, context consistency class, contention, and hard-violation=false. For two states differing only in risk \(\psi_1\le\psi_2\), we have
-\(\delta(\Sigma_1,\Theta) \le \delta(\Sigma_2,\Theta)\).
+## Theorem B2 (Monotonicity under risk escalation)
 
-**Proof.** Case analysis on threshold regions:
-1. \(\psi_2 < \tau_{allow}\): both states in allow/throttle region depending on other fixed guards, never stricter-to-weaker under higher risk.
-2. \(\tau_{allow} \le \psi_2 < \tau_{deny}\): output at least throttle; increasing risk cannot move to allow because allow predicate requires risk below \(\tau_{allow}\).
-3. \(\psi_2 \ge \tau_{deny}\): output deny.
-Hence severity is monotone non-decreasing. ∎
+**Statement.** Fix \(\kappa,t,\chi,\beta,\nu,\rho,\sigma\) and let \(\psi_1\le\psi_2\). Assume same credential-validity class and context class hold for both states. If
+\(\Gamma\vdash\Sigma_1\Downarrow a_1\) and \(\Gamma\vdash\Sigma_2\Downarrow a_2\), then \(a_1\preceq a_2\).
 
-## P3. Invalid or context-inconsistent credentials cannot allow
+**Proof.** From risk classification rules, \(\mathsf{risk\_class}(\psi)\) is monotone in \(\psi\): low→mid→high only. Corresponding applicable risk action is monotone (`allow` contribution for low, `throttle` for mid, `deny` for high). Other rule outputs are fixed by hypothesis (same credential/context/contention/hard classes). Let fixed multiset be \(F\); then
+\(a_1 = (\bigsqcup F) \sqcup r_1\), \(a_2 = (\bigsqcup F) \sqcup r_2\), with \(r_1\preceq r_2\). By isotonicity of \(\sqcup\), \(a_1\preceq a_2\). ∎
 
-**Statement.** If credential invalid OR context inconsistent beyond allowed bound, decision is not allow.
+## Theorem B3 (Invalid or hard-inconsistent credentials exclude allow)
 
-**Proof by contradiction.** Assume decision is allow while invalid/inconsistent holds. Allow branch in `decide_action` is reachable only after initial guard
-`if not credential_valid or not context_consistent ...: deny` evaluates false. Contradiction. Therefore allow is impossible. ∎
+**Statement.** If either (i) \(\Gamma\vdash\neg\mathsf{cred\_valid}(\kappa,t)\) or (ii) \(\Gamma\vdash\mathsf{ctx\_class}(\kappa,\chi)=\mathsf{hard}\), then \(\Gamma\vdash\Sigma\Downarrow a\Rightarrow a\neq\mathsf{allow}\).
 
-## P4. Severity-max composition no-downgrade
+**Proof.** Case (i): by `(CRED-DENY)` we derive an applicable `deny` action, so by `(AUTH)` composition contains top element and final action is deny. Case (ii): by `(CTX-HARD)` escalation rule we derive `deny`, again forcing final action deny by `(AUTH)`. In both cases allow is impossible. ∎
 
-**Statement.** For action multisets \(X\subseteq Y\), `compose_actions(X) <= compose_actions(Y)`.
+## Theorem B4 (Composition non-downgrade)
 
-**Proof.** `compose_actions` is max over totally ordered action lattice. Adding elements to a set cannot decrease its maximum. ∎
+**Statement.** Let applicable action multisets satisfy \(X\subseteq Y\). Then \(\bigsqcup X \preceq \bigsqcup Y\).
 
-Tests in `tests/test_formal_policy.py` corroborate implementation conformance; they are not substitutes for proofs.
+**Proof.** Since \(\sqcup\) is max over total order \(\preceq\), \(\bigsqcup X\) is the greatest element of \(X\), while \(\bigsqcup Y\) is greatest in superset \(Y\). A superset cannot have a smaller maximum. ∎
+
+## Theorem B5 (Determinism under fixed environment)
+
+**Statement.** For fixed \(\Gamma\) and \(\Sigma\), if \(\Gamma\vdash\Sigma\Downarrow a\) and \(\Gamma\vdash\Sigma\Downarrow a'\), then \(a=a'\).
+
+**Proof.** Rule applicability judgments are predicates over fixed \(\Gamma,\Sigma\), hence produce a unique multiset \(\mathcal R(\Sigma)\). `(AUTH)` defines result as \(\bigsqcup \mathcal R(\Sigma)\), unique because max over total order is unique. Therefore \(a=a'\). ∎
+
+## Corollary (Deny precedence)
+
+If any applicable rule yields deny, final action is deny. This follows directly from B4 with `deny` as top element and from B1/B3 instantiations.
+
+---
+
+Implementation tests in `tests/test_formal_policy.py` are **conformance checks** for selected theorem instances; they are not the proofs themselves.

@@ -1,14 +1,16 @@
-# Method Overview (Formalized Access Control)
+# Method Overview (Formal Rule-System Access Control)
 
-This artifact defines a formalized context-aware access-control method for API-facing LLM services.
+This artifact defines a formal context-aware access-control method with explicit judgment forms and rule composition.
 
-- Formal semantics: `docs/formal_semantics.md`.
-- Formal propositions/proofs: `docs/proofs.md`.
-- Implementation decision object: `baselines/B4_full/policy.py`.
-- End-to-end enforcement and state transitions: `baselines/B4_full/app.py`.
+- Formal semantics (judgments, inference rules, transition chain): `docs/formal_semantics.md`.
+- Abstract proofs over rule system: `docs/proofs.md`.
+- Implementation instantiation of action order/composition: `baselines/B4_full/policy.py`.
+- Runtime instantiation of credential lifecycle and signals: `baselines/B4_full/app.py`.
 
-Core control order is explicit and reusable: `allow < throttle < deny`.
-Rule composition is severity-max with deny precedence.
+Core algebra:
+- action order `allow < throttle < deny`,
+- composition operator = severity-max join,
+- hard-violation dominance and no-downgrade under additional stronger rules.
 
 Canonical reproducibility entrypoint remains:
 

@@ -32,11 +32,13 @@ SCENARIOS = {
     "S6_drift": 34,
     "S7_cross_device_reuse_attack": 48,
     "S7_cross_device_reuse_benign": 48,
+    "S8_camouflaged_replay_attack": 220,
+    "S8_camouflaged_replay_benign": 220,
 }
 
 ALL_SCENARIOS = list(SCENARIOS.keys())
 BENIGN_SCENARIOS = {
-    "S5_slowdrip", "S6_drift", "S7_cross_device_reuse_benign",
+    "S5_slowdrip", "S6_drift", "S7_cross_device_reuse_benign", "S8_camouflaged_replay_benign",
     "S4_burst_L1", "S4_burst_L2", "S4_burst_L3", "S4_burst_L4", "S4_burst",
     "S1_benign_control_hard", "S2_benign_control_hard", "S3_benign_control_hard",
 }
@@ -84,7 +86,7 @@ def scenario_requests(scenario: str, n: int, *, seed: int, baseline: str | None 
             requests.append(req)
         return _seed_shuffle(requests, scenario=scenario, seed=seed)
 
-    if scenario in {"S5_slowdrip", "S6_drift", "S7_cross_device_reuse_attack", "S7_cross_device_reuse_benign"}:
+    if scenario in {"S5_slowdrip", "S6_drift", "S7_cross_device_reuse_attack", "S7_cross_device_reuse_benign", "S8_camouflaged_replay_attack", "S8_camouflaged_replay_benign"}:
         for idx in range(n):
             req = _default_request(scenario, idx)
             if scenario == "S5_slowdrip":
@@ -103,6 +105,14 @@ def scenario_requests(scenario: str, n: int, *, seed: int, baseline: str | None 
                 req["x_forwarded_for"] = f"10.0.0.{(idx % 15) + 1}"
                 req["messages"] = [{"role": "user", "content": "cross-device benign mobility"}]
                 req["max_tokens"] = 15 + (idx % 3)
+            if scenario == "S8_camouflaged_replay_attack":
+                req["x_forwarded_for"] = "10.0.0.11" if idx < 60 else f"10.0.0.{(idx % 25) + 20}"
+                req["messages"] = [{"role": "user", "content": "camouflaged replay near-miss " + ("n" * (idx % 7 + 4))}]
+                req["max_tokens"] = 22 + (idx % 8)
+            elif scenario == "S8_camouflaged_replay_benign":
+                req["x_forwarded_for"] = f"10.0.0.{(idx % 8) + 9}"
+                req["messages"] = [{"role": "user", "content": "benign session continuity " + ("b" * (idx % 5 + 3))}]
+                req["max_tokens"] = 18 + (idx % 5)
             req["_capability_manifest"] = manifest
             requests.append(req)
         return _seed_shuffle(requests, scenario=scenario, seed=seed)

@@ -246,9 +246,10 @@ def write_report(
 
     group_defs = {
         "S4_pair": ["S4_mixedload_sweep_x1.00", "S4_mixedload_sweep_x0.70", "S4_mixedload_sweep_x0.50", "S4_mixedload_sweep_x0.35", "S4_mixedload_sweep_x0.25"],
-        "S5_pair": ["S5_slowdrip", "S7_cross_device_reuse_attack"],
-        "S6_pair": ["S6_drift", "S7_cross_device_reuse_attack"],
+        "S5_pair": ["S5_slowdrip", "S8_camouflaged_replay_attack"],
+        "S6_pair": ["S6_drift", "S7_cross_device_reuse_attack", "S7_cross_device_reuse_benign"],
         "S7_pair": ["S7_cross_device_reuse_attack", "S7_cross_device_reuse_benign"],
+        "S8_pair": ["S8_camouflaged_replay_attack", "S8_camouflaged_replay_benign"],
     }
     ablation_targets = [
         ("B2", "baseline B2"),
@@ -287,7 +288,7 @@ def write_report(
         "- We model API-facing LLM authorization as a stateful access-control problem over subjects, context-bound credentials, request context, endpoint scope, and budget contention.",
         "- Objective: maximize benign service continuity while minimizing attack success in the non-deny channel (allow+throttle), under a frozen comparable evaluation protocol.",
         "",
-        "# 2. Formal Authorization Semantics",
+        "# 2. Rule-System Authorization Semantics",
         "- **State model**: authorization state is tuple Σ=(ι,κ,χ,ρ,σ,ψ,β,ν), where ι is subject identity state, κ credential state, χ runtime context state, ρ request state, σ resource/action scope, ψ risk state, β contention budget state, ν hard-violation predicate.",
         "- **Credential semantics**: issuance/exchange in `/auth/exchange`; validity requires signature, expiry, PoP (`cnf.jkt`) consistency, and context-bound hash consistency (unless ablated).",
         "- **Decision relation**: δ(Σ,Θ)→A where A={allow, throttle, deny}. Implemented in `decide_action` with explicit deny gates for invalid credentials, context inconsistency, hard violations, or risk/contention deny thresholds.",
@@ -296,10 +297,11 @@ def write_report(
         "- **Rule composition**: R = Rcred ⊔ Rctx ⊔ Rhard ⊔ Rrisk ⊔ Rbudget with deny precedence and no-downgrade under stronger evidence.",
         "",
         "# 3. Propositions and Proofs",
-        "- **P1 (Hard-violation priority)**: if ν=true then δ(Σ,Θ)=deny. *Proof*: direct from first guard in `decide_action`; once ν is true execution returns deny before any lower-severity branch.",
-        "- **P2 (Monotonicity under increasing risk)**: under fixed κ-valid, χ-consistent, β and ν=false, if ψ1≤ψ2 then δ(Σ1,Θ) ≤ δ(Σ2,Θ) in action order. *Proof*: case split on thresholds `tau_allow` and `tau_deny`; branch predicates are monotone in ψ and map to non-decreasing severities.",
-        "- **P3 (Invalid/inconsistent credentials cannot allow)**: if κ invalid OR χ inconsistent beyond permitted bound then δ(Σ,Θ)≠allow. *Proof*: contradiction: allow branch reachable only after the initial deny guard, which requires κ-valid and χ-consistent.",
-        "- **P4 (Severity-max composition)**: for action sets X⊆Y, compose_actions(X) ≤ compose_actions(Y). *Proof*: `compose_actions=max` over total order; adding elements cannot decrease maximum.",
+        "- **B1 Hard-violation deny theorem**: from `(HARD)` and `(AUTH)` with deny as top element, any derivable hard-violation yields final deny.",
+        "- **B2 Risk monotonicity theorem**: with fixed credential/context/contention classes, monotone risk-class mapping and isotonic join imply non-decreasing decision severity.",
+        "- **B3 Invalid/inconsistent exclusion theorem**: `(CRED-DENY)` or `(CTX-HARD)` injects deny into rule set, so allow is not derivable.",
+        "- **B4 Composition non-downgrade theorem**: `⊔` is severity-max join on total order; adding stronger applicable rules cannot reduce severity.",
+        "- **B5 Determinism theorem**: fixed Γ and Σ produce a unique applicable-rule multiset and therefore unique composed action.",
         "",
         "# 4. Implementation Mapping",
         "- Credential exchange + context binding: `baselines/B4_full/app.py` (`/auth/exchange`, `_ctx_hash`, token encode/decode).",
@@ -310,13 +312,13 @@ def write_report(
         "",
         "# 5. Experimental Design",
         "- Frozen comparable core evaluation: shared rerun pipeline, shared metric code, shared seed policy.",
-        "- Stronger held-out external-style validation (still synthetic): domain-shifted families `S5_slowdrip` and `S6_drift`, treated as held-out stressors.",
+        "- Held-out synthetic/OOD design: `S5_pair`, `S6_pair`, `S7_pair`, and harder `S8_pair` (camouflaged replay after warmup), separated from S4 tuning path.",
         "- Ablation plan: B2, B4 full, B4_no_ctx, B4_no_multi, B4_weak_signals, B4_simple_policy.",
         "- Seed policy: `python -m scripts.run_all --seed 7 --seeds 1`.",
         "- Reported metrics include S4 PR-AUC, Lift@100, SR_benign@x1.00, ASR_non_deny_attack@x1.00.",
         "",
-        "# 6. Results",
-        "## 6.1 Core S4 results",
+        "# 6. Core Results",
+        "## 6.1 Frozen comparable S4 results",
         f"- Strategy chosen: **{strategy}**.",
         f"- Frozen protocol run id: **{run_protocol_id}**.",
         "",
@@ -329,7 +331,8 @@ def write_report(
 
     md += [
         "",
-        "## 6.2 Complete ablation table (S4 x1.00)",
+        "# 7. Complete Ablation Analysis",
+        "## 7.1 S4 x1.00 ablation table",
         "| method | S4 PR-AUC | S4 Lift@100 | SR_benign | ASR_non_deny_attack |",
         "|---|---:|---:|---:|---:|",
     ]
@@ -340,31 +343,32 @@ def write_report(
 
     md += [
         "",
-        "## 6.3 Complete held-out synthetic validation (B2 vs B4)",
+        "# 8. Discriminative Held-Out Validation",
+        "## 8.1 Held-out synthetic/OOD families (B2 vs B4)",
         "| family | baseline | PR-AUC | Lift@100 | SR_benign | ASR_non_deny_attack | n_non_deny | n_attack_non_deny | n_benign_non_deny | interpretation |",
         "|---|---|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for fam, scenarios in group_defs.items():
         for baseline in ["B2", "B4"]:
             pr, lift, sr_benign, asr_non_deny, n_nd, n_a, n_b = _heldout_pair_metrics(baseline, fam, scenarios)
-            note = "Synthetic held-out family; PR/Lift N/A when class support is single-label."
+            note = "Synthetic held-out/OOD family; when Lift@100 is N/A (n_non_deny<100), PR-AUC + SR/ASR + counts are primary."
             md.append(f"| {fam} | {baseline} | {_fmt(pr)} | {_fmt(lift)} | {_fmt(sr_benign)} | {_fmt(asr_non_deny)} | {n_nd} | {n_a} | {n_b} | {note} |")
 
     md += [
         "",
-        "## 6.4 Attribution analysis",
+        "## 8.2 Attribution under held-out stress",
         "- Context binding removal (`B4_no_ctx`) isolates credential-context consistency effects.",
         "- Multi-action removal (`B4_no_multi`) isolates throttle-lane contribution.",
         "- Weak-signal and simplified-policy variants isolate score quality vs policy structure effects.",
         "",
-        "# 7. Property Checks",
-        "- Formal proofs are in this report Section 3 and in `docs/proofs.md`; tests are corroborative implementation checks only.",
-        "- Covered implementation checks: hard-violation=>deny, invalid/inconsistent-not-allow, monotonicity, severity-max no-downgrade, frozen protocol invariants.",
-        "- Frozen protocol comparability invariants are recorded in `results/consistency_audit.csv`.",
+        "# 9. Property Checks versus Formal Proofs",
+        "- **Proved in docs (semantic level):** B1/B2/B3/B4/B5 in `docs/proofs.md`, based on inference rules in `docs/formal_semantics.md`.",
+        "- **Checked in tests (implementation conformance):** `tests/test_formal_policy.py` and frozen protocol checks.",
+        "- **Empirical only:** ablation deltas and held-out performance are empirical outcomes, not theorems.",
         "",
-        "# 8. Positioning and Limitations",
-        "- Positioning supported: **formalized context-aware access-control method** with explicit semantics, rule composition order, and proved core safety properties under stated assumptions.",
-        "- Limitation: held-out evidence is still synthetic OOD validation; no external deployment telemetry or theorem-prover mechanization.",
+        "# 10. Positioning and Limitations",
+        "- Positioning supported: **formal context-aware access-control method with explicit rule-system semantics, abstract safety properties, and discriminative held-out synthetic validation under frozen comparable evaluation**.",
+        "- Limitations: held-out sets remain synthetic/OOD (not deployment traces), and proofs are pen-and-paper rather than mechanized theorem proving.",
         "",
         "## Comparability verification appendix",
         f"- same metric code: **{_bool_csv(same_stack['same_metric_code'])}**",
@@ -470,12 +474,12 @@ def write_report(
     EXTERNAL_VALIDATION_CSV.write_text("\n".join(ext_lines) + "\n", encoding="utf-8")
 
     PROPERTY_CHECKS_CSV.write_text(
-        "property_id,formal_proposition,formal_status,implementation_check_status,implementation_evidence,scope_assumptions\n"
-        "P1,hard_violation_implies_deny,proved_in_docs,passed,tests/test_formal_policy.py::test_hard_violation_forces_deny,\"Assumes policy thresholds finite and decide_action semantics in policy.py\"\n"
-        "P2,risk_monotonicity_under_fixed_validity_context_contention,proved_in_docs,passed,tests/test_formal_policy.py::test_monotonicity_under_increasing_risk,\"Assumes credential_valid=true context_consistent=true hard_violation=false fixed contention\"\n"
-        "P3,invalid_or_inconsistent_credentials_cannot_allow,proved_in_docs,passed,tests/test_formal_policy.py::test_invalid_or_inconsistent_never_allow,\"Assumes consistent token/decode semantics and mismatch bound\"\n"
-        "P4,severity_max_composition_no_downgrade,proved_in_docs,passed,tests/test_formal_policy.py::test_severity_max_composition_is_monotone,\"Assumes compose_actions=max over allow<throttle<deny\"\n"
-        "P5,frozen_protocol_invariants,n_a,passed,results/consistency_audit.csv,\"Empirical comparability invariant, not a theorem\"\n",
+        "property_id,proposition,proof_status,test_status,empirical_status,implementation_evidence,scope_assumptions\n"
+        "P1,hard_violation_implies_deny,proved_in_docs,checked_in_tests,not_empirical_only,tests/test_formal_policy.py::test_hard_violation_forces_deny,\"Abstract rule HARD + AUTH; assumes deny is top severity\"\n"
+        "P2,risk_monotonicity_under_fixed_cred_ctx_contention,proved_in_docs,checked_in_tests,not_empirical_only,tests/test_formal_policy.py::test_monotonicity_under_increasing_risk,\"Fixed credential/context/contention classes; monotone risk classes\"\n"
+        "P3,invalid_or_hard_mismatch_excludes_allow,proved_in_docs,checked_in_tests,not_empirical_only,tests/test_formal_policy.py::test_invalid_or_inconsistent_never_allow,\"CRED-DENY and CTX-HARD rules active\"\n"
+        "P4,composition_non_downgrade,proved_in_docs,checked_in_tests,not_empirical_only,tests/test_formal_policy.py::test_severity_max_composition_is_monotone,\"Composition operator is severity-max join\"\n"
+        "P5,frozen_protocol_invariants,not_proved_in_docs,checked_in_tests,empirical_only,results/consistency_audit.csv,\"Comparability invariants are empirical protocol checks\"\n",
         encoding="utf-8",
     )
 

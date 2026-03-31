@@ -164,6 +164,37 @@ def run_b4_variant_scenario(
                 validate_request_semantics(scenario=scenario, auth_present=True, dpop_present=True, dpop_valid=True, exchange_called=scenario == "S7_cross_device_reuse_benign")
                 record_sample(scenario=scenario, baseline="B4", caps=manifest, auth_present=True, dpop_present=True, dpop_valid=True, exchange_called=scenario == "S7_cross_device_reuse_benign", replay_key="", asn="AS100", country="US", ua_family="browser", max_tokens=int(req.get("max_tokens", 0)))
                 client.post("/v1/chat/completions", json=req, headers=headers)
+        elif scenario in {"S8_camouflaged_replay_attack", "S8_camouflaged_replay_benign"}:
+            issue_ctx = _ctx("10.0.0.11", "AS100", "US", "browser/100.1", "fp-1")
+            ex = _exchange(client, LEGIT_JWK, issue_ctx, "10.0.0.11")
+            token, jkt = str(ex["access_token"]), str(ex["cnf"]["jkt"])
+            stable_replay = _proof(LEGIT_PRIVATE, token, "s8-fixed-replay", jkt)
+            for idx, req in enumerate(reqs):
+                if scenario == "S8_camouflaged_replay_attack":
+                    if idx < 50:
+                        proof = _proof(LEGIT_PRIVATE, token, f"s8-warmup-{idx}", jkt)
+                        req_ctx = issue_ctx
+                        req_ip = "10.0.0.11"
+                    elif idx % 3 == 0:
+                        proof = stable_replay
+                        req_ctx = issue_ctx
+                        req_ip = "10.0.0.11"
+                    elif idx % 3 == 1:
+                        proof = stable_replay
+                        req_ctx = _ctx("10.0.0.37", "AS100", "US", "browser/100.1", "fp-1")
+                        req_ip = "10.0.0.37"
+                    else:
+                        proof = stable_replay
+                        req_ctx = _ctx("198.51.100.41", "AS999", "GB", "browser/120.1", "fp-x")
+                        req_ip = "198.51.100.41"
+                else:
+                    proof = _proof(LEGIT_PRIVATE, token, f"s8-benign-{idx}", jkt)
+                    req_ctx = _ctx(f"10.0.0.{(idx % 8) + 9}", "AS100", "US", f"browser/100.{idx%2}", "fp-1")
+                    req_ip = f"10.0.0.{(idx % 8) + 9}"
+                replay_key = json.loads(proof).get("jti", "")
+                validate_request_semantics(scenario=scenario, auth_present=True, dpop_present=True, dpop_valid=True, exchange_called=True)
+                record_sample(scenario=scenario, baseline="B4", caps=manifest, auth_present=True, dpop_present=True, dpop_valid=True, exchange_called=True, replay_key=replay_key, asn="AS100", country="US", ua_family="browser", max_tokens=int(req.get("max_tokens", 0)))
+                client.post("/v1/chat/completions", json=req, headers={"Authorization": f"Bearer {token}", "DPoP": proof, "X-Forwarded-For": req_ip, "X-CTX": req_ctx})
         else:
             burst = {"S4_burst", "S4_burst_L1", "S4_burst_L2", "S4_burst_L3", "S4_burst_L4"}
             issue_ctx = _ctx("10.0.0.12", "AS100", "US", "browser/100.2", "fp-2") if scenario in burst else owner_ctx

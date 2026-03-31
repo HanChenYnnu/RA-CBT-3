@@ -25,6 +25,7 @@ LOSO_GROUPS = {
     "S3_pair": ["S3_replay_hard", "S3_replay_nearmiss_hard", "S3_replay_blended_hard", "S3_benign_control_hard"],
     "S4_pair": ["S4_mixedload_sweep_x1.00", "S4_mixedload_sweep_x0.70", "S4_mixedload_sweep_x0.50", "S4_mixedload_sweep_x0.35", "S4_mixedload_sweep_x0.25"],
     "S7_pair": ["S7_cross_device_reuse_attack", "S7_cross_device_reuse_benign"],
+    "S8_pair": ["S8_camouflaged_replay_attack", "S8_camouflaged_replay_benign"],
 }
 
 

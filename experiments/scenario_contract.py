@@ -47,6 +47,8 @@ SCENARIO_CAPABILITIES: dict[str, ScenarioCapabilities] = {
     "S3_benign_control_hard": ScenarioCapabilities(True, True, True, True, "none", tuple(), "hard", "benign", None),
     "S7_cross_device_reuse_attack": ScenarioCapabilities(True, True, True, True, "none", tuple(), "hard", "attack", "S7_cross_device_reuse_benign"),
     "S7_cross_device_reuse_benign": ScenarioCapabilities(True, True, True, True, "none", tuple(), "hard", "benign", None),
+    "S8_camouflaged_replay_attack": ScenarioCapabilities(True, True, True, True, "near_miss_replay", ("ath", "signature"), "hard", "attack", "S8_camouflaged_replay_benign"),
+    "S8_camouflaged_replay_benign": ScenarioCapabilities(True, True, True, True, "none", tuple(), "hard", "benign", None),
 }
 
 DEFAULT_BENIGN = ScenarioCapabilities(True, True, True, True, "none", tuple(), "easy", "benign", None)

@@ -1,7 +1,7 @@
 method,baseline,scenario,s4_pr_auc,s4_lift_at_100,sr_benign_x1,asr_non_deny_attack_x1
-baseline B2,B2,S4_mixedload_sweep_x1.00,0.5213,1.1000,0.1733,0.2267
-B4 full,B4,S4_mixedload_sweep_x1.00,0.9585,2.6862,0.2082,0.1918
-B4 w/o context binding,B4_no_ctx,S4_mixedload_sweep_x1.00,0.5284,2.6189,0.2083,0.1917
-B4 w/o multi-action control,B4_no_multi,S4_mixedload_sweep_x1.00,0.5289,2.5778,0.2077,0.1923
-B4 weak risk/context signals,B4_weak_signals,S4_mixedload_sweep_x1.00,0.5246,2.6342,0.2079,0.1921
-B4 simplified decision policy,B4_simple_policy,S4_mixedload_sweep_x1.00,0.5276,2.6112,0.2080,0.1920
+baseline B2,B2,S4_mixedload_sweep_x1.00,0.5185,1.1200,0.1733,0.2267
+B4 full,B4,S4_mixedload_sweep_x1.00,0.9572,2.6862,0.2082,0.1918
+B4 w/o context binding,B4_no_ctx,S4_mixedload_sweep_x1.00,0.5258,2.5660,0.2083,0.1917
+B4 w/o multi-action control,B4_no_multi,S4_mixedload_sweep_x1.00,0.5264,2.5515,0.2077,0.1923
+B4 weak risk/context signals,B4_weak_signals,S4_mixedload_sweep_x1.00,0.5242,2.5816,0.2079,0.1921
+B4 simplified decision policy,B4_simple_policy,S4_mixedload_sweep_x1.00,0.5261,2.6376,0.2080,0.1920

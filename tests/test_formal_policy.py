@@ -79,3 +79,10 @@ def test_severity_max_composition_is_monotone() -> None:
     assert base is ControlAction.THROTTLE
     assert stronger is ControlAction.DENY
     assert not is_more_permissive(stronger, base)
+
+
+def test_decision_determinism_for_fixed_state() -> None:
+    s = AuthorizationState(credential_valid=True, context_consistent=True, hard_violation=False, risk_score=0.42, contention=0.22, restricted_credential=False)
+    a1 = decide_action(s, TH)
+    a2 = decide_action(s, TH)
+    assert a1 is a2
