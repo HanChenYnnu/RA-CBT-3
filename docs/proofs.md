@@ -34,9 +34,15 @@ Proofs below are over the rule system in `docs/formal_semantics.md`, not over so
 
 **Proof.** Rule applicability judgments are predicates over fixed \(\Gamma,\Sigma\), hence produce a unique multiset \(\mathcal R(\Sigma)\). `(AUTH)` defines result as \(\bigsqcup \mathcal R(\Sigma)\), unique because max over total order is unique. Therefore \(a=a'\). ∎
 
+## Theorem B6 (Replay evidence non-neutralization)
+
+**Statement.** Let \(\Sigma\) be any state with a baseline composed action \(a_0\). If replay-history evidence satisfies `(REPLAY-ACCUM)` or `(REPLAY-HARD)`, then the new composed action \(a_1\) after adding \(R_{replay}\) cannot be more permissive than \(a_0\).
+
+**Proof.** By construction, `(REPLAY-ACCUM)` yields `throttle` and `(REPLAY-HARD)` yields `deny`. Let the original applicable action multiset be \(X\) with \(a_0=\bigsqcup X\). Adding replay evidence produces \(Y=X\cup\{r\}\), where \(r\in\{\mathsf{throttle},\mathsf{deny}\}\). Since \(X\subseteq Y\), Theorem B4 implies \(\bigsqcup X \preceq \bigsqcup Y\), i.e., \(a_0 \preceq a_1\). Therefore replay evidence cannot be canceled by weaker allow evidence. ∎
+
 ## Corollary (Deny precedence)
 
-If any applicable rule yields deny, final action is deny. This follows directly from B4 with `deny` as top element and from B1/B3 instantiations.
+If any applicable rule yields deny, final action is deny. This follows directly from B4 with `deny` as top element and from B1/B3/B6 instantiations.
 
 ---
 

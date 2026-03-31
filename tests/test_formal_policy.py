@@ -86,3 +86,25 @@ def test_decision_determinism_for_fixed_state() -> None:
     a1 = decide_action(s, TH)
     a2 = decide_action(s, TH)
     assert a1 is a2
+
+
+def test_replay_evidence_cannot_be_neutralized_by_allow() -> None:
+    baseline_allow = decide_action(
+        AuthorizationState(
+            credential_valid=True,
+            context_consistent=True,
+            hard_violation=False,
+            risk_score=0.05,
+            contention=0.02,
+            restricted_credential=False,
+        ),
+        TH,
+    )
+    assert baseline_allow is ControlAction.ALLOW
+
+    replay_escalation = compose_actions(baseline_allow, ControlAction.THROTTLE)
+    replay_and_hard_mismatch = compose_actions(replay_escalation, ControlAction.DENY)
+    assert replay_escalation is ControlAction.THROTTLE
+    assert replay_and_hard_mismatch is ControlAction.DENY
+    assert not is_more_permissive(replay_escalation, baseline_allow)
+    assert not is_more_permissive(replay_and_hard_mismatch, replay_escalation)

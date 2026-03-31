@@ -43,6 +43,7 @@ Ablation baselines are included:
 
 Held-out external-style validation (still synthetic/OOD) is reported for discriminative families including:
 - `S5_pair`, `S6_pair`, `S7_pair`, `S8_pair` (including camouflaged replay and cross-device reuse stressors).
+- `S8_pair` is explicitly treated as the hard failure-revealing family and includes staged camouflaged replay after benign warmup.
 
 ## Primary research artifacts
 
@@ -50,8 +51,6 @@ Held-out external-style validation (still synthetic/OOD) is reported for discrim
 - `results/report.csv`: machine-readable per-seed metrics, audit summaries, and narrative-aligned summary rows.
 - `results/plots/*.svg`: supporting figures generated from the same frozen run.
 - `scripts/run_all.py`: canonical deterministic entrypoint for regeneration.
-
-> PR packaging note: binary plot exports (for example `results/plots/*.png`) are intentionally excluded in this PR-ready branch. Text/vector artifacts (`.md`, `.csv`, `.svg`) are preserved, and figures are reproducible locally via the canonical script. See `results/plots/README.md`.
 
 ## Reproducible rerun
 
@@ -62,6 +61,14 @@ python -m scripts.run_all --seed 7 --seeds 5
 ```
 
 This regenerates report artifacts under `results/` using the canonical pipeline.
+
+For the frozen robustness panel (core S4 + held-out S8), run shared seeds:
+
+```bash
+python -m scripts.run_all --seed 7 --seeds 5
+```
+
+Per-seed outputs are stored in `results/multiseed_runs.csv`.
 
 Optional auto-commit mode for generated results:
 
