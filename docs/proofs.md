@@ -1,49 +1,54 @@
-# Abstract Semantic Proofs
+# Formal Properties and Proof Sketches for CBRCA
 
-Proofs below are over the rule system in `docs/formal_semantics.md`, not over source-order in code.
+These are semantic proofs over `docs/formal_semantics.md` for **Context-Bound Credential and Rule-Composed Authorization (CBRCA)**.
 
-## Theorem B1 (Hard-violation deny)
+## Proof scope
 
-**Statement.** If \(\Gamma \vdash \Sigma \Rightarrow R_{hard}:\mathsf{deny}\), then \(\Gamma \vdash \Sigma \Downarrow \mathsf{deny}\).
+All claims are within the explicit CBRCA semantic model. They are not claims about arbitrary access-control systems.
 
-**Proof.** By rule `(AUTH)`, final action is \(a=\bigsqcup_i a_i\) over all applicable rules. Since one member is `deny` from `(HARD)`, and `deny` is top element of \((A,\preceq)\), \(a=\mathsf{deny}\). ∎
+## B1. Hard-violation deny
 
-## Theorem B2 (Monotonicity under risk escalation)
+**Statement.** If `Γ ⊢ Σ ⇒ R_hard : deny`, then final authorization is `Γ ⊢ Σ ⇓ deny`.
 
-**Statement.** Fix \(\kappa,t,\chi,\beta,\nu,\rho,\sigma\) and let \(\psi_1\le\psi_2\). Assume same credential-validity class and context class hold for both states. If
-\(\Gamma\vdash\Sigma_1\Downarrow a_1\) and \(\Gamma\vdash\Sigma_2\Downarrow a_2\), then \(a_1\preceq a_2\).
+**Proof sketch.** Final action is severity-max over applicable rule outputs. Since `deny` is top, result is `deny`.
 
-**Proof.** From risk classification rules, \(\mathsf{risk\_class}(\psi)\) is monotone in \(\psi\): low→mid→high only. Corresponding applicable risk action is monotone (`allow` contribution for low, `throttle` for mid, `deny` for high). Other rule outputs are fixed by hypothesis (same credential/context/contention/hard classes). Let fixed multiset be \(F\); then
-\(a_1 = (\bigsqcup F) \sqcup r_1\), \(a_2 = (\bigsqcup F) \sqcup r_2\), with \(r_1\preceq r_2\). By isotonicity of \(\sqcup\), \(a_1\preceq a_2\). ∎
+## B2. Monotonicity under risk escalation
 
-## Theorem B3 (Invalid or hard-inconsistent credentials exclude allow)
+**Statement.** With other classes fixed, increasing risk from `ψ1` to `ψ2` (`ψ1 ≤ ψ2`) cannot decrease decision severity.
 
-**Statement.** If either (i) \(\Gamma\vdash\neg\mathsf{cred\_valid}(\kappa,t)\) or (ii) \(\Gamma\vdash\mathsf{ctx\_class}(\kappa,\chi)=\mathsf{hard}\), then \(\Gamma\vdash\Sigma\Downarrow a\Rightarrow a\neq\mathsf{allow}\).
+**Proof sketch.** Risk class mapping is monotone (`low→mid→high`), and composition is isotone under severity-max.
 
-**Proof.** Case (i): by `(CRED-DENY)` we derive an applicable `deny` action, so by `(AUTH)` composition contains top element and final action is deny. Case (ii): by `(CTX-HARD)` escalation rule we derive `deny`, again forcing final action deny by `(AUTH)`. In both cases allow is impossible. ∎
+## B3. Invalid credential or hard mismatch excludes allow
 
-## Theorem B4 (Composition non-downgrade)
+**Statement.** If credential is invalid or context class is `hard`, final action cannot be `allow`.
 
-**Statement.** Let applicable action multisets satisfy \(X\subseteq Y\). Then \(\bigsqcup X \preceq \bigsqcup Y\).
+**Proof sketch.** Either condition injects a deny-producing rule, and deny dominates composition.
 
-**Proof.** Since \(\sqcup\) is max over total order \(\preceq\), \(\bigsqcup X\) is the greatest element of \(X\), while \(\bigsqcup Y\) is greatest in superset \(Y\). A superset cannot have a smaller maximum. ∎
+## B4. Composition non-downgrade
 
-## Theorem B5 (Determinism under fixed environment)
+**Statement.** For applicable action sets `X ⊆ Y`, `⨆X ≤ ⨆Y` under `allow < throttle < deny`.
 
-**Statement.** For fixed \(\Gamma\) and \(\Sigma\), if \(\Gamma\vdash\Sigma\Downarrow a\) and \(\Gamma\vdash\Sigma\Downarrow a'\), then \(a=a'\).
+**Proof sketch.** Severity-max over a superset cannot be smaller.
 
-**Proof.** Rule applicability judgments are predicates over fixed \(\Gamma,\Sigma\), hence produce a unique multiset \(\mathcal R(\Sigma)\). `(AUTH)` defines result as \(\bigsqcup \mathcal R(\Sigma)\), unique because max over total order is unique. Therefore \(a=a'\). ∎
+## B5. Determinism
 
-## Theorem B6 (Replay evidence non-neutralization)
+**Statement.** For fixed `Γ` and `Σ`, derived final action is unique.
 
-**Statement.** Let \(\Sigma\) be any state with a baseline composed action \(a_0\). If replay-history evidence satisfies `(REPLAY-ACCUM)` or `(REPLAY-HARD)`, then the new composed action \(a_1\) after adding \(R_{replay}\) cannot be more permissive than \(a_0\).
+**Proof sketch.** Applicable rule outputs are fixed predicates over fixed inputs; severity-max is unique.
 
-**Proof.** By construction, `(REPLAY-ACCUM)` yields `throttle` and `(REPLAY-HARD)` yields `deny`. Let the original applicable action multiset be \(X\) with \(a_0=\bigsqcup X\). Adding replay evidence produces \(Y=X\cup\{r\}\), where \(r\in\{\mathsf{throttle},\mathsf{deny}\}\). Since \(X\subseteq Y\), Theorem B4 implies \(\bigsqcup X \preceq \bigsqcup Y\), i.e., \(a_0 \preceq a_1\). Therefore replay evidence cannot be canceled by weaker allow evidence. ∎
+## B6. Replay evidence non-neutralization
 
-## Corollary (Deny precedence)
+**Statement.** Adding replay evidence from `(REPLAY-ACCUM)` or `(REPLAY-HARD)` cannot make the action less severe.
 
-If any applicable rule yields deny, final action is deny. This follows directly from B4 with `deny` as top element and from B1/B3/B6 instantiations.
+**Proof sketch.** Replay adds `throttle` or `deny` to the action set; by B4, composition cannot downgrade.
 
----
+## Proofs vs tests
 
-Implementation tests in `tests/test_formal_policy.py` are **conformance checks** for selected theorem instances; they are not the proofs themselves.
+- **Proofs (this file):** semantic guarantees under the formal model.
+- **Tests (`tests/test_formal_policy.py` and related):** implementation conformance checks for selected instances.
+
+Tests support fidelity of realization; they do not replace the proofs.
+
+## Paper positioning (scope and non-scope)
+
+**Positioning used throughout this repository:** CBRCA is an implementation-grounded formal method for context-aware authorization in API-facing LLM services, with explicit semantics and proved core properties under its stated model, plus frozen comparable evaluation. It is **not** claimed as a fully general access-control theory, real-world deployment validation, or proof outside the explicit semantic model.

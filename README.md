@@ -1,80 +1,64 @@
 # RA-CBT-3
 
-RA-CBT-3 is a deterministic artifact for a **formalized context-aware access-control method with explicit state/transition semantics, rule algebra, and proved core safety properties** for API-mediated LLM services. It combines: (A) context-bound credentials, (B) explicit rule-system authorization semantics for multi-action control, and (C) a frozen comparable evaluation protocol with ablations and held-out synthetic stress validation.
+RA-CBT-3 is a publication-structured research artifact for **Context-Bound Credential and Rule-Composed Authorization (CBRCA)**: a formal context-aware access-control method for API-facing LLM services, with explicit authorization semantics, proved core safety properties, and implementation-grounded frozen evaluation.
 
 ## Problem statement
 
-Static long-lived API keys can be replayed or misused across devices, network contexts, and time windows. A binary allow/deny gate also fails to preserve benign service quality under contention. The repository studies whether context binding and graded runtime control can reduce attack-side success while maintaining benign service in mixed-load conditions.
+API-facing LLM services often rely on static or weakly scoped credentials and binary allow/deny gates. This creates two coupled risks: (i) replay/misuse across context shifts (device/network/time), and (ii) avoidable benign service loss under mixed benign/adversarial traffic.
 
-## Formal method contribution (implementation-grounded)
+## Method summary: CBRCA
 
-### A) Context-Bound Dynamic API Credential Mechanism
-Implemented in baseline **B4** via short-lived exchanged tokens that bind to runtime context and proof-of-possession signals:
-- token exchange with `cnf.jkt` and context hash,
-- context checks over IP/ASN/country/UA/device fingerprint/time,
-- drift and anomaly scoring used at exchange and request time.
+CBRCA combines three components:
 
-### B) Explicit Authorization Semantics and Multi-Action Control
-Implemented via `baselines/B4_full/policy.py` and integrated in B4 request handling:
-- **allow** for low risk/pressure,
-- **throttle** via tighter token precharge under intermediate risk/pressure,
-- **deny** under high risk or hard policy violations.
+1. **Context-bound credentialing** (exchange-time and request-time context binding).
+2. **Rule-composed multi-action authorization** with `allow < throttle < deny` and severity-max composition.
+3. **Deterministic frozen evaluation protocol** for comparable B2 vs B4 analysis with S4/S8 attribution and held-out stress testing.
 
-The decision state explicitly includes credential validity, context consistency, hard-policy violations, risk score, and contention pressure.
+See method details in `docs/method_overview.md`.
 
-### C) Unified Comparable Evaluation Protocol for Mixed-Load Scenarios
-Implemented through the canonical pipeline entrypoint and frozen-stack reruns:
-- same metrics/slices/non-deny definition/aggregation/report logic,
-- same baseline-current pair (`B2` vs `B4`),
-- same shared seed set,
-- explicit mixed-load slice (`S4_pair`) and slice-aware reporting.
+## Formal contribution summary
 
-This protocol supports defensible interpretation of A and B; it is not a standalone replacement for control logic.
+CBRCA is formalized as explicit judgment and transition semantics with an action-composition algebra and replay-evidence accumulation rules. The repository includes core semantic proofs (hard-violation deny, monotonicity, invalid-credential exclusion, composition non-downgrade, determinism, replay non-neutralization) under the stated model.
 
-## What the experiments validate
+- Formal semantics: `docs/formal_semantics.md`
+- Proofs: `docs/proofs.md`
 
-The evaluation tests whether B4 (A+B) outperforms B2 under the frozen protocol (C), with emphasis on:
-- **S4 PR-AUC** and **S4 Lift@100** (risk ranking quality under mixed load),
-- **scale=1.00 SR_benign** (benign service rate),
-- **scale=1.00 ASR_non_deny_attack** (attack success on non-denied traffic).
+## Experiment summary
 
-Ablation baselines are included:
-- `B4_no_ctx`, `B4_no_multi`, `B4_weak_signals`, `B4_simple_policy`.
+Under a frozen comparable protocol, the repository reports:
 
-Held-out external-style validation (still synthetic/OOD) is reported for discriminative families including:
-- `S5_pair`, `S6_pair`, `S7_pair`, `S8_pair` (including camouflaged replay and cross-device reuse stressors).
-- `S8_pair` is explicitly treated as the hard failure-revealing family and includes staged camouflaged replay after benign warmup.
+- Core mixed-load S4 comparison (B2 vs B4),
+- Complete S4/S8 ablation and attribution,
+- Held-out synthetic/OOD families (S5/S6/S7/S8),
+- Multi-seed robustness with shared seeds.
 
-## Primary research artifacts
+Paper-facing report: `results/report.md`.
 
-- `results/report.md`: publication-oriented narrative (problem → method → experiments → results → conclusion).
-- `results/report.csv`: machine-readable per-seed metrics, audit summaries, and narrative-aligned summary rows.
-- `results/plots/*.svg`: supporting figures generated from the same frozen run.
-- `scripts/run_all.py`: canonical deterministic entrypoint for regeneration.
+## Paper positioning (scope and non-scope)
 
-## Reproducible rerun
+**Positioning used throughout this repository:** CBRCA is an implementation-grounded formal method for context-aware authorization in API-facing LLM services, with explicit semantics and proved core properties under its stated model, plus frozen comparable evaluation. It is **not** claimed as a fully general access-control theory, real-world deployment validation, or proof outside the explicit semantic model.
 
-From repo root:
+## Reproduction entrypoint
+
+Canonical deterministic entrypoint:
 
 ```bash
 python -m scripts.run_all --seed 7 --seeds 5
 ```
 
-This regenerates report artifacts under `results/` using the canonical pipeline.
-
-For the frozen robustness panel (core S4 + held-out S8), run shared seeds:
-
-```bash
-python -m scripts.run_all --seed 7 --seeds 5
-```
-
-Per-seed outputs are stored in `results/multiseed_runs.csv`.
-
-Optional auto-commit mode for generated results:
+Optional publish mode:
 
 ```bash
 python -m scripts.run_all --seed 7 --seeds 5 --publish-results true
 ```
+
+## Primary paper-support artifacts
+
+- `docs/paper_outline.md`
+- `docs/paper_contribution_map.md`
+- `docs/paper_section_notes.md`
+- `results/report.md`
+- `results/report.csv`
 
 ## Developer checks
 
@@ -85,9 +69,3 @@ make test
 make smoke
 make all
 ```
-
-
-## Formal artifacts
-
-- `docs/formal_semantics.md`
-- `docs/proofs.md`
