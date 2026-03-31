@@ -1,6 +1,6 @@
 # RA-CBT-3
 
-RA-CBT-3 is a deterministic artifact for a **formalized context-aware access-control method** for API-mediated LLM services. It combines: (A) context-bound credentials, (B) explicit authorization semantics for multi-action control, and (C) a frozen comparable evaluation protocol with ablations and held-out synthetic stress validation.
+RA-CBT-3 is a deterministic artifact for a **formalized context-aware access-control method with explicit state/transition semantics, rule algebra, and proved core safety properties** for API-mediated LLM services. It combines: (A) context-bound credentials, (B) explicit rule-system authorization semantics for multi-action control, and (C) a frozen comparable evaluation protocol with ablations and held-out synthetic stress validation.
 
 ## Problem statement
 
@@ -41,8 +41,8 @@ The evaluation tests whether B4 (A+B) outperforms B2 under the frozen protocol (
 Ablation baselines are included:
 - `B4_no_ctx`, `B4_no_multi`, `B4_weak_signals`, `B4_simple_policy`.
 
-Held-out external-style validation (still synthetic) is reported for:
-- `S5_slowdrip`, `S6_drift`.
+Held-out external-style validation (still synthetic/OOD) is reported for discriminative families including:
+- `S5_pair`, `S6_pair`, `S7_pair`, `S8_pair` (including camouflaged replay and cross-device reuse stressors).
 
 ## Primary research artifacts
 
@@ -78,3 +78,9 @@ make test
 make smoke
 make all
 ```
+
+
+## Formal artifacts
+
+- `docs/formal_semantics.md`
+- `docs/proofs.md`

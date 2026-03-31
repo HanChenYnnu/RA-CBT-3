@@ -1,6 +1,6 @@
-property_id,property,status,evidence
-P1,expired_or_invalid_credential_implies_not_allow,checked,tests/test_formal_policy.py::test_invalid_credential_denied
-P2,hard_policy_violation_implies_deny,checked,tests/test_formal_policy.py::test_hard_violation_forces_deny
-P3,action_monotonicity_under_risk,checked,tests/test_formal_policy.py::test_monotonicity_under_increasing_risk
-P4,context_mismatch_not_allow,checked,tests/test_formal_policy.py::test_context_inconsistency_denied
-P5,frozen_protocol_invariants,checked,results/consistency_audit.csv
+property_id,proposition,proof_status,test_status,empirical_status,implementation_evidence,scope_assumptions
+P1,hard_violation_implies_deny,proved_in_docs,checked_in_tests,not_empirical_only,tests/test_formal_policy.py::test_hard_violation_forces_deny,"Abstract rule HARD + AUTH; assumes deny is top severity"
+P2,risk_monotonicity_under_fixed_cred_ctx_contention,proved_in_docs,checked_in_tests,not_empirical_only,tests/test_formal_policy.py::test_monotonicity_under_increasing_risk,"Fixed credential/context/contention classes; monotone risk classes"
+P3,invalid_or_hard_mismatch_excludes_allow,proved_in_docs,checked_in_tests,not_empirical_only,tests/test_formal_policy.py::test_invalid_or_inconsistent_never_allow,"CRED-DENY and CTX-HARD rules active"
+P4,composition_non_downgrade,proved_in_docs,checked_in_tests,not_empirical_only,tests/test_formal_policy.py::test_severity_max_composition_is_monotone,"Composition operator is severity-max join"
+P5,frozen_protocol_invariants,not_proved_in_docs,checked_in_tests,empirical_only,results/consistency_audit.csv,"Comparability invariants are empirical protocol checks"
