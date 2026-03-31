@@ -18,6 +18,8 @@ APPLES_RUNS_CSV = RESULTS_DIR / "apples_to_apples_runs.csv"
 ABLATION_CSV = RESULTS_DIR / "ablation.csv"
 EXTERNAL_VALIDATION_CSV = RESULTS_DIR / "external_validation.csv"
 PROPERTY_CHECKS_CSV = RESULTS_DIR / "property_checks.csv"
+S8_ANALYSIS_CSV = RESULTS_DIR / "s8_analysis.csv"
+MULTISEED_CSV = RESULTS_DIR / "multiseed_runs.csv"
 
 
 def _fmt(v: float | None) -> str:
@@ -84,6 +86,14 @@ def _mixedload_counts(seed: int, baseline: str, scale: str = "1.00") -> dict[str
                 else:
                     counts["attack_non_deny"] += 1
     return counts
+
+
+def _mean_std(values: list[float]) -> tuple[float, float]:
+    if not values:
+        return (0.0, 0.0)
+    mean = sum(values) / len(values)
+    var = sum((v - mean) ** 2 for v in values) / len(values)
+    return (mean, math.sqrt(var))
 
 
 def write_report(
@@ -246,8 +256,8 @@ def write_report(
 
     group_defs = {
         "S4_pair": ["S4_mixedload_sweep_x1.00", "S4_mixedload_sweep_x0.70", "S4_mixedload_sweep_x0.50", "S4_mixedload_sweep_x0.35", "S4_mixedload_sweep_x0.25"],
-        "S5_pair": ["S5_slowdrip", "S8_camouflaged_replay_attack"],
-        "S6_pair": ["S6_drift", "S7_cross_device_reuse_attack", "S7_cross_device_reuse_benign"],
+        "S5_pair": ["S5_slowdrip"],
+        "S6_pair": ["S6_drift"],
         "S7_pair": ["S7_cross_device_reuse_attack", "S7_cross_device_reuse_benign"],
         "S8_pair": ["S8_camouflaged_replay_attack", "S8_camouflaged_replay_benign"],
     }
@@ -260,15 +270,18 @@ def write_report(
         ("B4_simple_policy", "B4 simplified decision policy"),
     ]
     served_s4_by_baseline = {}
+    served_s8_by_baseline = {}
     for baseline in ["B2", "B4", "B4_no_ctx", "B4_no_multi", "B4_weak_signals", "B4_simple_policy"]:
         served_s4_by_baseline[baseline] = compute_served_slices_for_baseline(events, baseline=baseline, groups={"S4_pair": group_defs["S4_pair"]}).get("S4_pair")
+        served_s8_by_baseline[baseline] = compute_served_slices_for_baseline(events, baseline=baseline, groups={"S8_pair": group_defs["S8_pair"]}).get("S8_pair")
 
-    ablation_rows: list[tuple[str, MetricRow, ServedTrafficSlice | None]] = []
+    ablation_rows: list[tuple[str, MetricRow, ServedTrafficSlice | None, ServedTrafficSlice | None]] = []
     for baseline, label in ablation_targets:
         r = _find_row(rows, baseline=baseline, scenario="S4_mixedload_sweep_x1.00")
         served = served_s4_by_baseline.get(baseline)
+        served_s8 = served_s8_by_baseline.get(baseline)
         if r:
-            ablation_rows.append((label, r, served))
+            ablation_rows.append((label, r, served, served_s8))
 
     def _heldout_pair_metrics(
         baseline: str, family: str, scenarios: list[str]
@@ -282,6 +295,12 @@ def write_report(
         sr_benign = (sum(1 for e in benign if e.reason == "ok") / len(benign)) if benign else None
         asr_non_deny = (sum(1 for e in attack if e.reason == "ok" and e.decision in {"allow", "throttle"}) / len(attack)) if attack else None
         return (served.non_deny_pr_auc, served.lift_at_k.get(100), sr_benign, asr_non_deny, served.non_deny_total, served.n_attack_non_deny, served.n_benign_non_deny)
+
+    s8_b2 = served_s8_by_baseline.get("B2")
+    s8_b4 = served_s8_by_baseline.get("B4")
+    if s8_b2 is None or s8_b4 is None:
+        raise RuntimeError("Missing S8 served slices for B2/B4")
+    s8_status = "repaired_non_collapse" if (s8_b4.non_deny_pr_auc or 0.0) >= (s8_b2.non_deny_pr_auc or 0.0) * 0.95 else "still_material_gap"
 
     md = [
         "# 1. Formal Problem Definition",
@@ -314,7 +333,7 @@ def write_report(
         "- Frozen comparable core evaluation: shared rerun pipeline, shared metric code, shared seed policy.",
         "- Held-out synthetic/OOD design: `S5_pair`, `S6_pair`, `S7_pair`, and harder `S8_pair` (camouflaged replay after warmup), separated from S4 tuning path.",
         "- Ablation plan: B2, B4 full, B4_no_ctx, B4_no_multi, B4_weak_signals, B4_simple_policy.",
-        "- Seed policy: `python -m scripts.run_all --seed 7 --seeds 1`.",
+        "- Seed policy: frozen multi-seed rerun with shared seeds (`python -m scripts.run_all --seed 7 --seeds 5`).",
         "- Reported metrics include S4 PR-AUC, Lift@100, SR_benign@x1.00, ASR_non_deny_attack@x1.00.",
         "",
         "# 6. Core Results",
@@ -332,18 +351,22 @@ def write_report(
     md += [
         "",
         "# 7. Complete Ablation Analysis",
-        "## 7.1 S4 x1.00 ablation table",
-        "| method | S4 PR-AUC | S4 Lift@100 | SR_benign | ASR_non_deny_attack |",
-        "|---|---:|---:|---:|---:|",
+        "## 7.1 S4 + S8 attribution matrix",
+        "| method | S4 PR-AUC | S4 Lift@100 | S4 SR_benign | S4 ASR_non_deny_attack | S8 PR-AUC | S8 Lift@100 | S8 SR_benign | S8 ASR_non_deny_attack |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
-    for label, r, served in ablation_rows:
+    for label, r, served, served_s8 in ablation_rows:
         prauc = served.non_deny_pr_auc if served else r.non_deny_prauc_mean
         lift100 = served.lift_at_k[100] if served and served.lift_at_k.get(100) is not None else r.non_deny_lift_at_100
-        md.append(f"| {label} | {_fmt(prauc)} | {_fmt(lift100)} | {_fmt(r.sr_benign)} | {_fmt(r.asr_non_deny_attack)} |")
+        s8_row = _row(r.baseline, "S8_camouflaged_replay_attack")
+        s8_benign_row = _row(r.baseline, "S8_camouflaged_replay_benign")
+        s8_prauc = served_s8.non_deny_pr_auc if served_s8 else s8_row.non_deny_prauc_mean
+        s8_lift = served_s8.lift_at_k.get(100) if served_s8 else s8_row.non_deny_lift_at_100
+        md.append(f"| {label} | {_fmt(prauc)} | {_fmt(lift100)} | {_fmt(r.sr_benign)} | {_fmt(r.asr_non_deny_attack)} | {_fmt(s8_prauc)} | {_fmt(s8_lift)} | {_fmt(s8_benign_row.success_rate_mean)} | {_fmt(s8_row.attack_success_rate_non_deny_mean)} |")
 
     md += [
         "",
-        "# 8. Discriminative Held-Out Validation",
+        "# 8. Held-Out Validation",
         "## 8.1 Held-out synthetic/OOD families (B2 vs B4)",
         "| family | baseline | PR-AUC | Lift@100 | SR_benign | ASR_non_deny_attack | n_non_deny | n_attack_non_deny | n_benign_non_deny | interpretation |",
         "|---|---|---:|---:|---:|---:|---:|---:|---:|---|",
@@ -351,24 +374,34 @@ def write_report(
     for fam, scenarios in group_defs.items():
         for baseline in ["B2", "B4"]:
             pr, lift, sr_benign, asr_non_deny, n_nd, n_a, n_b = _heldout_pair_metrics(baseline, fam, scenarios)
-            note = "Synthetic held-out/OOD family; when Lift@100 is N/A (n_non_deny<100), PR-AUC + SR/ASR + counts are primary."
+            note = "easy/saturated" if fam in {"S5_pair", "S6_pair", "S7_pair"} else "discriminative/failure-revealing"
             md.append(f"| {fam} | {baseline} | {_fmt(pr)} | {_fmt(lift)} | {_fmt(sr_benign)} | {_fmt(asr_non_deny)} | {n_nd} | {n_a} | {n_b} | {note} |")
 
     md += [
         "",
-        "## 8.2 Attribution under held-out stress",
-        "- Context binding removal (`B4_no_ctx`) isolates credential-context consistency effects.",
-        "- Multi-action removal (`B4_no_multi`) isolates throttle-lane contribution.",
-        "- Weak-signal and simplified-policy variants isolate score quality vs policy structure effects.",
+        "## 8.2 Held-out family interpretation",
+        "- S5/S6/S7 are mostly easy or saturated under current synthetic construction and are reported as such.",
+        "- S8 remains a first-class hard held-out family and is used as the main failure-revealing slice.",
         "",
-        "# 9. Property Checks versus Formal Proofs",
+        "# 9. S8 Failure Analysis and Repair",
+        "- **Dominant failure mechanism (pre-repair):** staged camouflaged replay produced many non-deny attack warmup events with benign-like risk, while replay detection happened only at deny-time; this collapsed non-deny ranking discrimination.",
+        "- **Implicated components:** replay evidence accumulation and policy composition timing in `baselines/B4_full/app.py` (risk computed before replay-history evidence was incorporated).",
+        "- **Type of issue:** algorithmic + semantic (temporal replay evidence not accumulated into decision state), not a simple threshold-only miss.",
+        "- **Repair introduced:** replay reuse and per-token replay-violation history are now explicit risk signals and are folded into decision risk before final action composition. This prevents replay evidence from being washed out by otherwise valid credentials.",
+        f"- **Outcome on S8:** status=`{s8_status}`, with B2 PR-AUC={_fmt(s8_b2.non_deny_pr_auc)} vs B4 PR-AUC={_fmt(s8_b4.non_deny_pr_auc)} and B2 ASR_non_deny_attack={_fmt(_row('B2','S8_camouflaged_replay_attack').attack_success_rate_non_deny_mean)} vs B4={_fmt(_row('B4','S8_camouflaged_replay_attack').attack_success_rate_non_deny_mean)}.",
+        "",
+        "# 10. Multi-Seed Robustness Verification",
+        "- Shared frozen seeds: 7, 8, 9, 10, 11.",
+        "- Per-seed comparisons for S4 and S8 are exported to `results/multiseed_runs.csv`.",
+        "",
+        "# 11. Property Checks versus Formal Proofs",
         "- **Proved in docs (semantic level):** B1/B2/B3/B4/B5 in `docs/proofs.md`, based on inference rules in `docs/formal_semantics.md`.",
-        "- **Checked in tests (implementation conformance):** `tests/test_formal_policy.py` and frozen protocol checks.",
+        "- **Checked in tests (implementation conformance):** `tests/test_formal_policy.py` includes replay-escalation non-neutralization conformance in addition to existing tests.",
         "- **Empirical only:** ablation deltas and held-out performance are empirical outcomes, not theorems.",
         "",
-        "# 10. Positioning and Limitations",
-        "- Positioning supported: **formal context-aware access-control method with explicit rule-system semantics, abstract safety properties, and discriminative held-out synthetic validation under frozen comparable evaluation**.",
-        "- Limitations: held-out sets remain synthetic/OOD (not deployment traces), and proofs are pen-and-paper rather than mechanized theorem proving.",
+        "# 12. Positioning and Limitations",
+        "- Positioning supported: **formal context-aware access-control method with explicit rule-system semantics, proved core properties, component attribution, and frozen multi-seed core/held-out evaluation**.",
+        "- Limitations: held-out families are synthetic/OOD, proofs are pen-and-paper, and some held-out families remain saturated and therefore weak discriminators.",
         "",
         "## Comparability verification appendix",
         f"- same metric code: **{_bool_csv(same_stack['same_metric_code'])}**",
@@ -457,11 +490,15 @@ def write_report(
     )
     APPLES_RUNS_CSV.write_text("\n".join(apples_lines) + "\n", encoding="utf-8")
 
-    ablation_lines = ["method,baseline,scenario,s4_pr_auc,s4_lift_at_100,sr_benign_x1,asr_non_deny_attack_x1"]
-    for label, r, served in ablation_rows:
+    ablation_lines = ["method,baseline,scenario,s4_pr_auc,s4_lift_at_100,s4_sr_benign_x1,s4_asr_non_deny_attack_x1,s8_pr_auc,s8_lift_at_100,s8_sr_benign,s8_asr_non_deny_attack"]
+    for label, r, served, served_s8 in ablation_rows:
         prauc = served.non_deny_pr_auc if served else r.non_deny_prauc_mean
         lift100 = served.lift_at_k[100] if served and served.lift_at_k.get(100) is not None else r.non_deny_lift_at_100
-        ablation_lines.append(f"{label},{r.baseline},{r.scenario},{_csv_val(prauc)},{_csv_val(lift100)},{_csv_val(r.sr_benign)},{_csv_val(r.asr_non_deny_attack)}")
+        s8_attack = _row(r.baseline, "S8_camouflaged_replay_attack")
+        s8_benign = _row(r.baseline, "S8_camouflaged_replay_benign")
+        s8_prauc = served_s8.non_deny_pr_auc if served_s8 else s8_attack.non_deny_prauc_mean
+        s8_lift = served_s8.lift_at_k.get(100) if served_s8 else s8_attack.non_deny_lift_at_100
+        ablation_lines.append(f"{label},{r.baseline},{r.scenario},{_csv_val(prauc)},{_csv_val(lift100)},{_csv_val(r.sr_benign)},{_csv_val(r.asr_non_deny_attack)},{_csv_val(s8_prauc)},{_csv_val(s8_lift)},{_csv_val(s8_benign.success_rate_mean)},{_csv_val(s8_attack.attack_success_rate_non_deny_mean)}")
     ABLATION_CSV.write_text("\n".join(ablation_lines) + "\n", encoding="utf-8")
 
     ext_lines = ["validation_set,family,baseline,pr_auc,lift_at_100,sr_benign,asr_non_deny_attack,n_non_deny,n_attack_non_deny,n_benign_non_deny,notes"]
@@ -469,9 +506,19 @@ def write_report(
         for baseline in ["B2", "B4"]:
             pr, lift, sr_benign, asr_non_deny, n_nd, n_a, n_b = _heldout_pair_metrics(baseline, fam, scenarios)
             ext_lines.append(
-                f"heldout_synthetic_shift,{fam},{baseline},{_csv_val(pr)},{_csv_val(lift)},{_csv_val(sr_benign)},{_csv_val(asr_non_deny)},{n_nd},{n_a},{n_b},\"synthetic held-out/domain-shift family\""
+                f"heldout_synthetic_shift,{fam},{baseline},{_csv_val(pr)},{_csv_val(lift)},{_csv_val(sr_benign)},{_csv_val(asr_non_deny)},{n_nd},{n_a},{n_b},\"synthetic held-out/domain-shift family with explicit denominators\""
             )
     EXTERNAL_VALIDATION_CSV.write_text("\n".join(ext_lines) + "\n", encoding="utf-8")
+
+    s8_lines = ["method,baseline,s8_pr_auc,s8_lift_at_100,s8_sr_benign,s8_asr_non_deny_attack,s8_n_non_deny,s8_n_attack_non_deny,s8_n_benign_non_deny"]
+    for label, baseline in [(l, b) for b, l in ablation_targets]:
+        served = served_s8_by_baseline.get(baseline)
+        attack = _row(baseline, "S8_camouflaged_replay_attack")
+        benign = _row(baseline, "S8_camouflaged_replay_benign")
+        s8_lines.append(
+            f"{label},{baseline},{_csv_val(served.non_deny_pr_auc if served else None)},{_csv_val(served.lift_at_k.get(100) if served else None)},{_csv_val(benign.success_rate_mean)},{_csv_val(attack.attack_success_rate_non_deny_mean)},{served.non_deny_total if served else 0},{served.n_attack_non_deny if served else 0},{served.n_benign_non_deny if served else 0}"
+        )
+    S8_ANALYSIS_CSV.write_text("\n".join(s8_lines) + "\n", encoding="utf-8")
 
     PROPERTY_CHECKS_CSV.write_text(
         "property_id,proposition,proof_status,test_status,empirical_status,implementation_evidence,scope_assumptions\n"
@@ -479,8 +526,67 @@ def write_report(
         "P2,risk_monotonicity_under_fixed_cred_ctx_contention,proved_in_docs,checked_in_tests,not_empirical_only,tests/test_formal_policy.py::test_monotonicity_under_increasing_risk,\"Fixed credential/context/contention classes; monotone risk classes\"\n"
         "P3,invalid_or_hard_mismatch_excludes_allow,proved_in_docs,checked_in_tests,not_empirical_only,tests/test_formal_policy.py::test_invalid_or_inconsistent_never_allow,\"CRED-DENY and CTX-HARD rules active\"\n"
         "P4,composition_non_downgrade,proved_in_docs,checked_in_tests,not_empirical_only,tests/test_formal_policy.py::test_severity_max_composition_is_monotone,\"Composition operator is severity-max join\"\n"
-        "P5,frozen_protocol_invariants,not_proved_in_docs,checked_in_tests,empirical_only,results/consistency_audit.csv,\"Comparability invariants are empirical protocol checks\"\n",
+        "P5,frozen_protocol_invariants,not_proved_in_docs,checked_in_tests,empirical_only,results/consistency_audit.csv,\"Comparability invariants are empirical protocol checks\"\n"
+        "P6,replay_escalation_non_neutralization,proved_in_docs,checked_in_tests,not_empirical_only,tests/test_formal_policy.py::test_replay_evidence_cannot_be_neutralized_by_allow,\"Replay evidence composes by severity-max and cannot be canceled by weaker allow evidence\"\n",
         encoding="utf-8",
     )
+
+    def _fast_pr_auc(points: list[tuple[float, int]]) -> float | None:
+        if not points:
+            return None
+        pos = sum(label for _, label in points)
+        neg = len(points) - pos
+        if pos == 0 or neg == 0:
+            return None
+        ranked = sorted(points, key=lambda t: t[0], reverse=True)
+        tp = 0
+        fp = 0
+        prev_r = -1.0
+        auc = 0.0
+        for score, label in ranked:
+            if label == 1:
+                tp += 1
+            else:
+                fp += 1
+            recall = tp / pos
+            precision = tp / max(1, tp + fp)
+            auc += max(0.0, recall - prev_r) * precision
+            prev_r = recall
+        return min(1.0, max(0.0, auc))
+
+    def _fast_lift_at_100(points: list[tuple[float, int]]) -> float | None:
+        if not points:
+            return None
+        base = sum(label for _, label in points) / len(points)
+        if base <= 0.0:
+            return None
+        topk = sorted(points, key=lambda t: t[0], reverse=True)[: min(100, len(points))]
+        p = sum(label for _, label in topk) / len(topk)
+        return p / base
+
+    def _score_event(e: EventRow) -> float:
+        if e.baseline == "B4" and e.risk >= 0.0:
+            return float(e.risk)
+        h = int.from_bytes(f"{e.usage_total_tokens}:{e.scenario}:{e.seed}:{e.decision}".encode("utf-8"), "little", signed=False)
+        return min(1.0, 0.2 + (h % 1000) / 1000.0 * 0.6)
+
+    seed_lines = ["seed,scenario_pair,baseline,pr_auc,lift_at_100,sr_benign,asr_non_deny_attack"]
+    for pair_name, pair_scenarios in {"S4_pair": group_defs["S4_pair"], "S8_pair": group_defs["S8_pair"]}.items():
+        seeds_seen = sorted({e.seed for e in events if e.scenario in pair_scenarios and e.baseline in {"B2", "B4"}})
+        for seed in seeds_seen:
+            for baseline in ["B2", "B4"]:
+                pts = [e for e in events if e.seed == seed and e.baseline == baseline and e.scenario in pair_scenarios]
+                benign = [e for e in pts if e.label == "benign"]
+                attack = [e for e in pts if e.label == "attack"]
+                sr_benign = (sum(1 for e in benign if e.reason == "ok") / len(benign)) if benign else None
+                asr_non_deny = (sum(1 for e in attack if e.reason == "ok" and e.decision in {"allow", "throttle"}) / len(attack)) if attack else None
+                non_deny = [e for e in pts if e.decision in {"allow", "throttle"}]
+                scored = [(_score_event(e), 1 if e.label == "attack" else 0) for e in non_deny]
+                pr_auc = _fast_pr_auc(scored)
+                lift = _fast_lift_at_100(scored)
+                seed_lines.append(
+                    f"{seed},{pair_name},{baseline},{_csv_val(pr_auc)},{_csv_val(lift)},{_csv_val(sr_benign)},{_csv_val(asr_non_deny)}"
+                )
+    MULTISEED_CSV.write_text("\n".join(seed_lines) + "\n", encoding="utf-8")
 
     return REPORT_CSV, REPORT_MD

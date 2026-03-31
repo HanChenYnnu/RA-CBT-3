@@ -4,3 +4,4 @@ P2,risk_monotonicity_under_fixed_cred_ctx_contention,proved_in_docs,checked_in_t
 P3,invalid_or_hard_mismatch_excludes_allow,proved_in_docs,checked_in_tests,not_empirical_only,tests/test_formal_policy.py::test_invalid_or_inconsistent_never_allow,"CRED-DENY and CTX-HARD rules active"
 P4,composition_non_downgrade,proved_in_docs,checked_in_tests,not_empirical_only,tests/test_formal_policy.py::test_severity_max_composition_is_monotone,"Composition operator is severity-max join"
 P5,frozen_protocol_invariants,not_proved_in_docs,checked_in_tests,empirical_only,results/consistency_audit.csv,"Comparability invariants are empirical protocol checks"
+P6,replay_escalation_non_neutralization,proved_in_docs,checked_in_tests,not_empirical_only,tests/test_formal_policy.py::test_replay_evidence_cannot_be_neutralized_by_allow,"Replay evidence composes by severity-max and cannot be canceled by weaker allow evidence"

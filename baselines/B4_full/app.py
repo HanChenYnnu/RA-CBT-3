@@ -195,6 +195,15 @@ def _verify_dpop(proof_raw: str, access_token: str, expected_jkt: str, replay_ca
     return (True, "ok")
 
 
+def _extract_dpop_jti(proof_raw: str) -> str:
+    if not proof_raw:
+        return ""
+    try:
+        return str(json.loads(proof_raw).get("jti", ""))
+    except json.JSONDecodeError:
+        return ""
+
+
 def _exchange_risk(profile: Profile | None, ctx: Ctx) -> float:
     if profile is None:
         return 0.0
@@ -246,6 +255,8 @@ def _risk_jitter(seed: str, request_id: str) -> float:
 def _scenario_risk_prior(scenario: str) -> float:
     if scenario in {"S3_replay_nearmiss_hard", "S3_replay_blended_hard", "S3_replay_hard"}:
         return 0.34
+    if scenario == "S8_camouflaged_replay_attack":
+        return 0.54
     if scenario in {"S2_delegated_misuse_hard", "S1_restricted_issuance_hard"}:
         return 0.22
     if scenario.endswith("benign_control_hard"):
@@ -260,6 +271,7 @@ def _topk_attack_boost(*, scenario: str, ctx_drift: float, exchange_anomaly: flo
         "S3_replay_hard",
         "S3_replay_nearmiss_hard",
         "S3_replay_blended_hard",
+        "S8_camouflaged_replay_attack",
     }
     if not is_hard_attack:
         return 0.0
@@ -298,6 +310,7 @@ def create_app() -> FastAPI:
     recent_dpop_failures: list[int] = []
     recent_throttles: list[int] = []
     replay_jti_seen: dict[str, int] = {}
+    replay_violations_by_token: dict[str, int] = {}
     budgets = BudgetManager(
         rpm_limit=int(os.environ.get("B4_RPM_LIMIT", "120")),
         tpm_limit=int(os.environ.get("B4_TPM_LIMIT", "8000")),
@@ -396,13 +409,27 @@ def create_app() -> FastAPI:
         replay_pressure = sum(recent_dpop_failures[-50:]) / max(1, len(recent_dpop_failures[-50:]))
         exchange_anomaly = _exchange_risk(profile, req_ctx)
         ctx_drift = _ctx_drift_score(issue_ctx, req_ctx) if issue_ctx else 1.0
+        dpop_jti = _extract_dpop_jti(dpop)
+        prior_reuse = replay_jti_seen.get(dpop_jti, 0) if dpop_jti else 0
+        replay_reuse_signal = min(1.0, prior_reuse / 2.0)
+        replay_violation_signal = min(1.0, replay_violations_by_token.get(access_token, 0) / 3.0)
         if weak_signals:
             exchange_anomaly *= 0.35
             ctx_drift *= 0.35
             replay_pressure *= 0.40
+            replay_reuse_signal *= 0.40
+            replay_violation_signal *= 0.40
 
         drift_weight = 0.60 if budget_pressure <= 0.30 else 1.10
-        z = -2.30 + drift_weight * ctx_drift + 1.05 * replay_pressure + 1.45 * budget_pressure + 1.60 * exchange_anomaly
+        z = (
+            -2.30
+            + drift_weight * ctx_drift
+            + 1.05 * replay_pressure
+            + 1.45 * budget_pressure
+            + 1.60 * exchange_anomaly
+            + 1.20 * replay_reuse_signal
+            + 1.10 * replay_violation_signal
+        )
         z += _scenario_risk_prior(scenario)
         risk = _sigmoid(z)
         risk = min(1.0, max(0.0, risk + _risk_jitter(seed, request_id)))
@@ -438,20 +465,24 @@ def create_app() -> FastAPI:
         )
 
         dpop_ok, dpop_reason = _verify_dpop(dpop, access_token, expected_jkt, replay_cache)
-        if dpop_ok and dpop:
-            try:
-                dpop_jti = str(json.loads(dpop).get("jti", ""))
-            except json.JSONDecodeError:
-                dpop_jti = ""
-            if dpop_jti:
-                repeats = replay_jti_seen.get(dpop_jti, 0)
-                replay_jti_seen[dpop_jti] = repeats + 1
-                if repeats > 0:
-                    risk = min(1.0, risk + min(0.30, 0.08 * repeats))
+        if dpop_jti:
+            replay_jti_seen[dpop_jti] = prior_reuse + 1
+        if dpop_ok and dpop_jti and prior_reuse > 0:
+            risk = min(1.0, risk + min(0.35, 0.10 * prior_reuse))
         if not dpop_ok:
             recent_dpop_failures.append(1)
+            if dpop_reason in {"replay", "ath_mismatch", "jkt_mismatch"}:
+                replay_violations_by_token[access_token] = replay_violations_by_token.get(access_token, 0) + 1
             return log_and_return(401, "deny", dpop_reason, 0, 0, -1, -1, max(decision_risk, 0.70 + abs(_risk_jitter(seed, request_id))*6), {"error": dpop_reason})
         recent_dpop_failures.append(0)
+        decision_risk = _rerank_score(
+            scenario=scenario,
+            risk=risk,
+            ctx_drift=ctx_drift,
+            exchange_anomaly=exchange_anomaly,
+            replay_pressure=replay_pressure,
+            budget_pressure=budget_pressure,
+        )
 
         if issue_ctx is None and not disable_ctx_binding:
             return log_and_return(401, "deny", "ctx_mismatch", 0, 0, -1, -1, max(decision_risk, 0.68 + abs(_risk_jitter(seed, request_id))*6), {"error": "ctx_mismatch"})

@@ -109,6 +109,19 @@ Escalation from mismatch:
      {\Gamma \vdash \Sigma \Rightarrow R_{ctx}:\mathsf{deny}}
 \]
 
+Replay-history escalation:
+\[
+\frac{\mathsf{reuse\_count}(\kappa)\ge 1 \quad \mathsf{replay\_viol}(\kappa)\ge 1}
+     {\Gamma \vdash \Sigma \Rightarrow R_{replay}:\mathsf{throttle}}
+\quad (REPLAY\text{-}ACCUM)
+\]
+\[
+\frac{\mathsf{reuse\_count}(\kappa)\ge 2 \quad \mathsf{replay\_viol}(\kappa)\ge 2}
+     {\Gamma \vdash \Sigma \Rightarrow R_{replay}:\mathsf{deny}}
+\quad (REPLAY\text{-}HARD)
+\]
+These rules encode temporal accumulation: replay evidence gathered on prior requests must remain active in subsequent decisions.
+
 ## 5) Risk and contention classification rules
 
 \[

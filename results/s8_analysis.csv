@@ -1,0 +1,7 @@
+method,baseline,s8_pr_auc,s8_lift_at_100,s8_sr_benign,s8_asr_non_deny_attack,s8_n_non_deny,s8_n_attack_non_deny,s8_n_benign_non_deny
+baseline B2,B2,0.8573,1.8600,1.0000,1.0000,440,220,220
+B4 full,B4,0.9900,2.7000,1.0000,0.2273,270,50,220
+B4 w/o context binding,B4_no_ctx,0.6988,2.6460,1.0000,0.2273,270,50,220
+B4 w/o multi-action control,B4_no_multi,0.6758,2.1060,1.0000,0.2273,270,50,220
+B4 weak risk/context signals,B4_weak_signals,0.7953,2.7100,1.0000,0.2318,271,51,220
+B4 simplified decision policy,B4_simple_policy,0.6707,2.4840,1.0000,0.2273,270,50,220
